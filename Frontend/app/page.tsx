@@ -441,7 +441,7 @@ export default function Page() {
               <div className="message-avatar"><BrandMark /></div>
               <div className="message-content">
                 <span className="message-author">CIRA AI <small>· thinking...</small></span>
-                <div className="bubble">...</div>
+                <div className="typing-indicator"><span /><span /><span /></div>
               </div>
             </div>
           )}
