@@ -1,0 +1,24 @@
+{
+  "catalog": {
+    "Sales": {
+      "table": "SALES_ORDERS",
+      "columns": {
+        "OrderID": "String",
+        "CustomerName": "String",
+        "TotalAmount": "Decimal",
+        "OrderDate": "Date",
+        "Status": "String"
+      }
+    },
+    "HR": {
+      "table": "EMPLOYEES",
+      "columns": {
+        "EmployeeID": "String",
+        "FirstName": "String",
+        "LastName": "String",
+        "Department": "String",
+        "HireDate": "Date"
+      }
+    }
+  }
+}

@@ -42,7 +42,7 @@ function ThemeToggle({ theme, onToggle }: { theme: 'light' | 'dark'; onToggle: (
   )
 }
 
-function Login({ onLogin, theme, onToggle }: { onLogin: () => void; theme: 'light' | 'dark'; onToggle: () => void }) { 
+function Login({ onLogin, theme, onToggle }: { onLogin: (id: string) => void; theme: 'light' | 'dark'; onToggle: () => void }) { 
   const [employee, setEmployee] = useState(''); 
   const [password, setPassword] = useState(''); 
   return (
@@ -56,7 +56,7 @@ function Login({ onLogin, theme, onToggle }: { onLogin: () => void; theme: 'ligh
         <div className="eyebrow"><ShieldCheck size={14} /> INTERNAL DATA ACCESS</div>
         <h1 id="login-title">Ask your enterprise<br /><em>anything.</em></h1>
         <p className="login-copy">Securely query SAP data with natural language. Built for clarity, speed, and control.</p>
-        <form onSubmit={(event) => { event.preventDefault(); onLogin() }}>
+        <form onSubmit={(event) => { event.preventDefault(); onLogin(employee || 'EMP-20481') }}>
           <label>Employee ID
             <input value={employee} onChange={(event) => setEmployee(event.target.value)} placeholder="e.g. EMP-20481" />
           </label>
@@ -205,6 +205,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
 
 export default function Page() { 
   const [loggedIn, setLoggedIn] = useState(false); 
+  const [employeeId, setEmployeeId] = useState('EMP-20481');
   const [collapsed, setCollapsed] = useState(false); 
   const [active, setActive] = useState('Q3 procurement variance'); 
   const [messages, setMessages] = useState<Message[]>(initialMessages); 
@@ -235,49 +236,91 @@ export default function Page() {
   
   const submit = async () => { 
     const value = input.trim(); 
-    if (!value) return; 
+    if (!value || isThinking) return; 
     
+    const sessionId = `${employeeId}__${active}`;
     setMessages((current) => [...current, { role: 'user', content: value }]); 
     setInput(''); 
     setIsThinking(true);
+
+    const streamingId = Date.now();
+    setMessages((current) => [...current, { role: 'assistant', content: '', _streamingId: streamingId }]);
 
     try {
       const res = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: value, session_id: active })
+        body: JSON.stringify({ query: value, session_id: sessionId })
       });
-      const data = await res.json();
-      
-      setMessages((current) => [
-        ...current, 
-        { 
-          role: 'assistant', 
-          content: data.text, 
-          data: data.type === 'tabular' ? data.data : undefined 
+
+      if (!res.body) throw new Error('No stream');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const parsed = JSON.parse(line.slice(6));
+            if (parsed.type === 'chunk') {
+              setMessages((current) => current.map((m: any) =>
+                m._streamingId === streamingId
+                  ? { ...m, content: m.content + parsed.text }
+                  : m
+              ));
+            } else if (parsed.type === 'tabular') {
+              setMessages((current) => current.map((m: any) =>
+                m._streamingId === streamingId
+                  ? { ...m, data: parsed.data }
+                  : m
+              ));
+            }
+          } catch {}
         }
-      ]);
+      }
     } catch (err) {
-      setMessages((current) => [
-        ...current, 
-        { 
-          role: 'assistant', 
-          content: 'Sorry, I encountered an error connecting to the FastAPI backend.' 
-        }
-      ]);
+      setMessages((current) => current.map((m: any) =>
+        m._streamingId === streamingId
+          ? { ...m, content: 'Sorry, I encountered an error connecting to the FastAPI backend.' }
+          : m
+      ));
     } finally {
       setIsThinking(false);
     }
   }; 
   
-  const selectChat = (title: string) => { 
-    setActive(title); 
-    if (title === 'New conversation') setMessages([]); 
-    else if (title === 'Q3 procurement variance') setMessages(initialMessages); 
-    else setMessages([{ role: 'assistant', content: `I’m ready to continue with “${title}”. What would you like to know?` }]) 
+  const selectChat = async (title: string) => { 
+    setActive(title);
+    if (title === 'New conversation') {
+      setMessages([]);
+      return;
+    }
+    if (title === 'Q3 procurement variance') {
+      setMessages(initialMessages);
+      return;
+    }
+    const sessionId = `${employeeId}__${title}`;
+    try {
+      const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(sessionId)}`);
+      const data = await res.json();
+      if (data.messages && data.messages.length > 0) {
+        setMessages(data.messages.map((m: any) => ({ role: m.role, content: m.content, data: m.data })));
+      } else {
+        setMessages([{ role: 'assistant', content: `I'm ready to continue with "${title}". What would you like to know?` }]);
+      }
+    } catch {
+      setMessages([{ role: 'assistant', content: `I'm ready to continue with "${title}". What would you like to know?` }]);
+    }
   }; 
   
-  if (!loggedIn) return <Login onLogin={() => setLoggedIn(true)} theme={theme} onToggle={toggleTheme} />; 
+  if (!loggedIn) return <Login onLogin={(id) => { setEmployeeId(id); setLoggedIn(true); }} theme={theme} onToggle={toggleTheme} />; 
   
   return (
     <main className="app-shell">
@@ -299,7 +342,7 @@ export default function Page() {
           </div>
           {messages.map((message, index) => (
             <div className={`message-row ${message.role}`} key={index}>
-              <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : 'AM'}</div>
+              <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
               <div className="message-content">
                 <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>{message.role === 'assistant' ? '· just now' : ''}</small></span>
                 <div className="bubble">
