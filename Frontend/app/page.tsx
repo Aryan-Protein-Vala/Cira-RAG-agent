@@ -299,10 +299,32 @@ export default function Page() {
     if (!value || isThinking) return; 
 
     let chatTitle = active;
-    if (active === 'New conversation') {
+    const isNew = active === 'New conversation';
+    if (isNew) {
       chatTitle = value.slice(0, 30) + (value.length > 30 ? '...' : '');
       setActive(chatTitle);
       setSessions(current => [{ id: Date.now(), title: chatTitle, date: 'Today' }, ...current]);
+      
+      // Fire background title generation
+      fetch('http://localhost:8000/generate_title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+        body: JSON.stringify({ prompt: value })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.title) {
+          fetch(`http://localhost:8000/session/${employeeId}__${chatTitle}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+            body: JSON.stringify({ title: data.title })
+          }).then(() => {
+            setActive(curr => curr === chatTitle ? data.title : curr);
+            setSessions(curr => curr.map(s => s.title === chatTitle ? { ...s, title: data.title } : s));
+          });
+        }
+      })
+      .catch(console.error);
     }
     
     const sessionId = `${employeeId}__${chatTitle}`;

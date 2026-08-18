@@ -228,6 +228,26 @@ async def delete_session(
     await db.commit()
     return {"ok": True}
 
+class TitleRequest(BaseModel):
+    prompt: str
+
+@app.post("/generate_title")
+async def generate_title(
+    request: TitleRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+):
+    from agent import llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    messages = [
+        SystemMessage(content="You are a helpful assistant. Generate a short, 2-4 word summary title for the following user message. Do not use quotes or punctuation. Respond ONLY with the title."),
+        HumanMessage(content=request.prompt)
+    ]
+    response = await llm.ainvoke(messages)
+    title = response.content.strip().strip('"\'')
+    if len(title) > 40:
+        title = title[:40] + "..."
+    return {"title": title}
 
 if __name__ == "__main__":
     import uvicorn
