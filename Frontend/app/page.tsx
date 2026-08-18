@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, Moon, MoreHorizontal, Paperclip, Pencil, Plus, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
+import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, Moon, MoreHorizontal, Paperclip, Pencil, Plus, Search, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { exportToExcel } from '@/lib/export'
@@ -51,7 +51,12 @@ function mintSessionToken(employeeId: string): string {
 
 function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: string) => void; theme: 'light' | 'dark'; onToggle: () => void }) { 
   const [employee, setEmployee] = useState(''); 
-  const [password, setPassword] = useState(''); 
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const ADMIN_ID = 'admin';
+  const ADMIN_PASSWORD = 'asdfghjkl;';
+
   return (
     <main className="login-shell">
       <div className="login-top">
@@ -65,7 +70,29 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: stri
         <p className="login-copy">Securely query SAP data with natural language. Built for clarity, speed, and control.</p>
         <form onSubmit={(event) => {
           event.preventDefault();
-          const id = employee.trim() || 'EMP-20481';
+          setError('');
+          const id = employee.trim();
+          const pass = password;
+
+          // Admin bypass — always grants access for demo/testing
+          if (id.toLowerCase() === ADMIN_ID && pass === ADMIN_PASSWORD) {
+            onLogin('ADMIN-001', mintSessionToken('ADMIN-001'));
+            return;
+          }
+
+          // For all other users: require at least an Employee ID
+          if (!id) {
+            setError('Please enter your Employee ID.');
+            return;
+          }
+
+          // In production replace this with a real SSO call.
+          // For now, any non-empty Employee ID with any non-empty password grants access.
+          if (!pass) {
+            setError('Please enter your password.');
+            return;
+          }
+
           onLogin(id, mintSessionToken(id));
         }}>
           <label>Employee ID
@@ -74,6 +101,7 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: stri
           <label>Password
             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" />
           </label>
+          {error && <p style={{ color: 'var(--destructive)', fontSize: '11px', margin: '0' }}>{error}</p>}
           <button className="primary-button login-button" type="submit">Sign in securely <ArrowUp size={16} /></button>
         </form>
         <p className="secure-note"><ShieldCheck size={13} /> SSO protected · Your queries are private</p>
