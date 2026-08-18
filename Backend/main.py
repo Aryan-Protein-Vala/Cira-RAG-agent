@@ -1,6 +1,6 @@
 import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from database import init_db, get_db, ChatSession, ChatMessage
+from database import init_db, get_db, create_short_lived_session, ChatSession, ChatMessage
 from agent import stream_chat_query
 from auth import bearer_scheme, validate_and_extract, exchange_for_sap_token
 
@@ -31,27 +31,52 @@ class ChatRequest(BaseModel):
     query: str
     session_id: str
 
+
 async def generate_chat_response(
     query: str,
     session_id: str,
-    db: AsyncSession,
     sap_token: str,
     employee_id: str
 ):
-    # 1. Fetch history for this session
-    stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.id)
-    result = await db.execute(stmt)
-    history = result.scalars().all()
-
-    # 2. Persist user message
-    user_msg = ChatMessage(session_id=session_id, role='user', content=query, msg_type='text')
-    db.add(user_msg)
-    await db.commit()
-
-    # 3. Stream agent output (tool is instantiated with the per-user SAP token)
+    """
+    Fix 4: This generator creates its OWN short-lived DB sessions instead of
+    holding a Depends(get_db) session open for the lifetime of a 10-15s SSE stream.
+    Two sessions: one for pre-stream setup, one for post-stream persistence.
+    """
     full_text = ""
     tabular_data = None
 
+    # ── Pre-stream: fetch history + save user message ─────────────────────────
+    async with create_short_lived_session() as db:
+        # Ensure session exists and belongs to this employee
+        stmt = select(ChatSession).where(
+            ChatSession.session_id == session_id,
+            ChatSession.employee_id == employee_id
+        )
+        result = await db.execute(stmt)
+        if not result.scalars().first():
+            db.add(ChatSession(session_id=session_id, title=session_id, employee_id=employee_id))
+            await db.commit()
+
+        # Fetch past messages (scoped to this employee's session — IDOR fix)
+        stmt = select(ChatMessage).where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.employee_id == employee_id
+        ).order_by(ChatMessage.id)
+        result = await db.execute(stmt)
+        history = result.scalars().all()
+
+        # Save user message
+        db.add(ChatMessage(
+            session_id=session_id,
+            employee_id=employee_id,
+            role='user',
+            content=query,
+            msg_type='text'
+        ))
+        await db.commit()
+
+    # ── Mid-stream: yield SSE chunks from agent ───────────────────────────────
     async for chunk in stream_chat_query(query, history, sap_token=sap_token, employee_id=employee_id):
         yield chunk
         if chunk.startswith("data: "):
@@ -64,41 +89,34 @@ async def generate_chat_response(
             except json.JSONDecodeError:
                 pass
 
-    # 4. Persist assistant response
-    assistant_msg = ChatMessage(
-        session_id=session_id,
-        role='assistant',
-        content=full_text.strip(),
-        msg_type='tabular' if tabular_data else 'text',
-        data_payload=json.dumps(tabular_data) if tabular_data else None
-    )
-    db.add(assistant_msg)
-    await db.commit()
+    # ── Post-stream: persist assistant response ───────────────────────────────
+    async with create_short_lived_session() as db:
+        db.add(ChatMessage(
+            session_id=session_id,
+            employee_id=employee_id,
+            role='assistant',
+            content=full_text.strip(),
+            msg_type='tabular' if tabular_data else 'text',
+            data_payload=json.dumps(tabular_data) if tabular_data else None
+        ))
+        await db.commit()
 
 
 @app.post("/chat")
 async def chat_endpoint(
     request: ChatRequest,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: AsyncSession = Depends(get_db)
 ):
-    # 1. Validate incoming session token — strip any master credentials from agent
+    # 1. Validate incoming session token
     user_context = validate_and_extract(credentials)
     employee_id = user_context.get("employee_id", "UNKNOWN")
 
-    # 2. OAuth2 SAML Bearer exchange — mint a short-lived, user-scoped SAP token
+    # 2. OAuth2 SAML Bearer exchange — mint short-lived, user-scoped SAP token
     sap_token = await exchange_for_sap_token(credentials.credentials, employee_id)
 
-    # 3. Ensure session exists in DB
-    stmt = select(ChatSession).where(ChatSession.session_id == request.session_id)
-    result = await db.execute(stmt)
-    if not result.scalars().first():
-        db.add(ChatSession(session_id=request.session_id, title=request.session_id))
-        await db.commit()
-
-    # 4. Stream with per-user SAP token injected into tool context
+    # Fix 4: Do NOT inject db session here — generator manages its own sessions
     return StreamingResponse(
-        generate_chat_response(request.query, request.session_id, db, sap_token, employee_id),
+        generate_chat_response(request.query, request.session_id, sap_token, employee_id),
         media_type="text/event-stream"
     )
 
@@ -109,10 +127,27 @@ async def get_history(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db)
 ):
-    # Validate token before returning any history
-    validate_and_extract(credentials)
+    # Validate token
+    user_context = validate_and_extract(credentials)
+    employee_id = user_context.get("employee_id", "UNKNOWN")
 
-    stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.id)
+    # Fix 2: IDOR — verify session ownership before returning any history
+    stmt = select(ChatSession).where(
+        ChatSession.session_id == session_id,
+        ChatSession.employee_id == employee_id   # ← ownership check
+    )
+    result = await db.execute(stmt)
+    if not result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this session."
+        )
+
+    # Return only messages owned by this employee
+    stmt = select(ChatMessage).where(
+        ChatMessage.session_id == session_id,
+        ChatMessage.employee_id == employee_id   # ← ownership check
+    ).order_by(ChatMessage.id)
     result = await db.execute(stmt)
     history = result.scalars().all()
 

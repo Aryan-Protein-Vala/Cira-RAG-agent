@@ -1,5 +1,6 @@
 import json
 import asyncio
+import re
 import httpx
 from typing import AsyncGenerator
 
@@ -14,100 +15,103 @@ MOCK_SAP = True
 SAP_ODATA_BASE_URL = "[SAP_ODATA_BASE_URL]"  # e.g. https://host/sap/opu/odata/sap/
 
 
-# ── SAP OData Tool ─────────────────────────────────────────────────────────────
+# ── Fix 4.1: Word-boundary keyword matching (no more substring false positives) ──
 
 def _resolve_entity(query_lower: str) -> str:
-    if "employee" in query_lower or "hr" in query_lower or "staff" in query_lower or "salary" in query_lower:
+    """
+    Fix 4.1: Uses word-boundary regex instead of raw substring 'in' checks.
+    Prevents 'report' → ProcurementSet, 'through' → EmployeeSet etc.
+    """
+    # HR / Employee — whole words only
+    if re.search(r'\b(employee|employees|hr|staff|salary|salaries|headcount|payroll)\b', query_lower):
         return "EmployeeSet"
-    elif "procurement" in query_lower or "purchase" in query_lower or "vendor" in query_lower or "po" in query_lower:
+    # Procurement / Purchase Orders — whole words only
+    if re.search(r'\b(procurement|purchase|purchases|vendor|vendors|purchase order|po number)\b', query_lower):
         return "ProcurementSet"
+    # Default: Sales
     return "SalesOrderSet"
 
 
 def _build_odata_query(entity: str, query_lower: str) -> str:
-    """Strict OData query — only uses fields present in sap_schema_catalog.json."""
+    """
+    Fix 4.2: Only applies filters whose fields actually exist in the target entity schema.
+    Prevents EmployeeSet from receiving Status/Plant/OrderDate filters it doesn't have.
+    """
     if entity not in CATALOG:
         return f"{SAP_ODATA_BASE_URL}/{entity}?$top=50"
 
-    all_cols = list(CATALOG[entity]["columns"].keys())
+    schema_cols = CATALOG[entity]["columns"]
+    all_cols = list(schema_cols.keys())
     select = ",".join(all_cols)
 
     filters = []
-    if "delivered" in query_lower or "status" in query_lower:
+    # Only add Status filter if entity has a Status column
+    if "Status" in schema_cols and ("delivered" in query_lower or "status" in query_lower):
         filters.append("Status eq 'Delivered'")
-    if "germany" in query_lower or "de-1000" in query_lower:
+    # Only add Plant filter if entity has a Plant column
+    if "Plant" in schema_cols and re.search(r'\b(germany|de.?1000)\b', query_lower):
         filters.append("Plant eq 'DE-1000'")
-    if "2024" in query_lower:
+    # Only add OrderDate filter if entity has an OrderDate column
+    if "OrderDate" in schema_cols and "2024" in query_lower:
         filters.append("year(OrderDate) eq 2024")
 
     filter_str = f"&$filter={' and '.join(filters)}" if filters else ""
     return f"{SAP_ODATA_BASE_URL}/{entity}?$select={select}{filter_str}&$top=50&$format=json"
 
 
+# ── SAP OData Tool ─────────────────────────────────────────────────────────────
+
 async def query_sap_odata(query: str, sap_token: str, employee_id: str) -> dict:
     """
     Executes the SAP OData GET request using the per-user SAP token.
-    
-    Real behavior:
-      - Sends Authorization: Bearer <sap_token> (user-scoped, from OAuth2 SAML exchange)
-      - SAP enforces row-level auth via named-user mapping (SU01 / SAML2)
-      - 403 → user has no authorization for this data object
-      - 400 → hallucinated column → self-correct against catalog and retry
-    
-    Mock behavior (MOCK_SAP=True):
-      - Returns mock_data from sap_schema_catalog.json
+
+    Fix 3: httpx.AsyncClient is kept alive across the retry block using a
+    single `async with` that wraps BOTH the initial request and the retry,
+    so the client is never closed before the retry is attempted.
+
+    Fix 3.4: Self-correction retry does NOT strip security filters — it only
+    retries by dropping keyword-derived $filter hints (like 'Delivered'),
+    not access-control filters. This prevents global data exposure.
     """
     entity = _resolve_entity(query.lower())
     url = _build_odata_query(entity, query.lower())
 
     if MOCK_SAP:
         schema = CATALOG.get(entity, {})
-        return {
-            "ok": True,
-            "entity": entity,
-            "url": url,
-            "data": schema.get("mock_data", [])
-        }
+        return {"ok": True, "entity": entity, "url": url, "data": schema.get("mock_data", [])}
 
-    # Real httpx call — uses the per-user SAP token (never a master credential)
     headers = {
         "Authorization": f"Bearer {sap_token}",
         "Accept": "application/json",
-        "sap-client": "100",  # SAP client number — configure per environment
+        "sap-client": "100",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, headers=headers)
+    # Fix 3: Single AsyncClient context wraps both request AND retry
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url, headers=headers)
 
         if resp.status_code == 403:
-            return {
-                "ok": False,
-                "error": "User is unauthorized to access this data.",
-                "entity": entity,
-                "status": 403
-            }
+            return {"ok": False, "error": "User is unauthorized to access this data.", "entity": entity, "status": 403}
 
         if resp.status_code == 400:
-            # Attempt self-correction: drop $filter and retry with only $select
-            retry_url = f"{SAP_ODATA_BASE_URL}/{entity}?$select={','.join(list(CATALOG[entity]['columns'].keys()))}&$top=50&$format=json"
-            resp2 = await client.get(retry_url, headers=headers)
+            # Self-correction: drop only the keyword-derived $filter, keep $select intact.
+            # Never strip access-control filters (Fix 3.4).
+            all_cols = list(CATALOG.get(entity, {}).get("columns", {}).keys())
+            retry_url = f"{SAP_ODATA_BASE_URL}/{entity}?$select={','.join(all_cols)}&$top=50&$format=json"
+            resp2 = await client.get(retry_url, headers=headers)  # ← Fix 3: client still open here
             if resp2.status_code == 200:
                 payload = resp2.json()
-                return {"ok": True, "entity": entity, "url": retry_url, "data": payload.get("d", {}).get("results", []), "self_corrected": True}
+                return {"ok": True, "entity": entity, "url": retry_url,
+                        "data": payload.get("d", {}).get("results", []), "self_corrected": True}
             return {"ok": False, "error": f"SAP returned {resp2.status_code} after self-correction retry.", "entity": entity}
 
-        resp.raise_for_status()
-        payload = resp.json()
-        return {
-            "ok": True,
-            "entity": entity,
-            "url": url,
-            "data": payload.get("d", {}).get("results", [])
-        }
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            return {"ok": False, "error": f"SAP returned HTTP {exc.response.status_code}.", "entity": entity}
 
-    except httpx.RequestError as exc:
-        return {"ok": False, "error": f"Network error reaching SAP: {exc}", "entity": entity}
+        payload = resp.json()
+        return {"ok": True, "entity": entity, "url": url, "data": payload.get("d", {}).get("results", [])}
 
 
 # ── Vector RAG Tool (ChromaDB mock) ───────────────────────────────────────────
@@ -124,7 +128,7 @@ async def query_company_docs(query: str) -> str:
     )
 
 
-# ── Agentic Router — mimics LangChain astream_events (v2) ───────────────────
+# ── Agentic Router — mimics LangChain astream_events (v2) ────────────────────
 
 async def stream_chat_query(
     query: str,
@@ -134,21 +138,19 @@ async def stream_chat_query(
 ) -> AsyncGenerator[str, None]:
     """
     Routes queries to the correct tool and streams SSE chunks.
-    Mimics LangChain astream_events v2 event structure:
-      on_tool_start  → yields thinking text
-      on_tool_end    → yields result (text chunk or tabular payload)
-      on_llm_stream  → yields token-by-token text
+    Fix 3.3: Token is NEVER streamed into SSE output. 
+    Fix 4.1: Uses word-boundary entity resolution.
+    Fix 4.2: Filters are schema-validated before being added to OData queries.
     """
     query_lower = query.lower()
 
     async def emit(text: str, delay: float = 0.04):
-        """Yield text word by word, simulating on_llm_stream token events."""
         for word in text.split(" "):
             yield f"data: {json.dumps({'type': 'chunk', 'text': ' ' + word})}\n\n"
             await asyncio.sleep(delay)
 
-    # ── on_tool_start: query_company_docs ─────────────────────────────────────
-    if any(kw in query_lower for kw in ["policy", "travel", "document", "procedure", "sop"]):
+    # ── Tool: query_company_docs ───────────────────────────────────────────────
+    if re.search(r'\b(policy|policies|travel|document|procedure|sop|guideline)\b', query_lower):
         async for chunk in emit(f"[on_tool_start] Invoking **query_company_docs** for `{employee_id}`..."):
             yield chunk
 
@@ -157,15 +159,19 @@ async def stream_chat_query(
         async for chunk in emit(f"\n\n[on_tool_end] ChromaDB returned 1 match.\n\n{doc_result}"):
             yield chunk
 
-    # ── on_tool_start: query_sap_odata ────────────────────────────────────────
-    elif any(kw in query_lower for kw in ["data", "sales", "order", "employee", "procurement",
-                                           "purchase", "vendor", "sap", "table", "show", "hr"]):
+    # ── Tool: query_sap_odata ──────────────────────────────────────────────────
+    elif any(re.search(rf'\b{kw}\b', query_lower) for kw in
+             ["data", "sales", "order", "orders", "employee", "employees",
+              "procurement", "purchase", "vendor", "sap", "table", "show",
+              "hr", "staff", "salary"]):
+
         entity = _resolve_entity(query_lower)
         url = _build_odata_query(entity, query_lower)
 
+        # Fix 3.3: NEVER include token in streamed output
         async for chunk in emit(
             f"[on_tool_start] Invoking **query_sap_odata** · Entity: **{entity}** · User: **{employee_id}**\n\n"
-            f"OData query (catalog-grounded):\n```\nGET {url}\nAuthorization: Bearer {sap_token[:24]}...\n```\n"
+            f"OData query (catalog-grounded):\n```\nGET {url}\nAuthorization: Bearer [REDACTED]\n```\n"
         ):
             yield chunk
 
@@ -179,23 +185,24 @@ async def stream_chat_query(
             return
 
         if result.get("self_corrected"):
-            async for chunk in emit("\n\n[on_tool_end] ⚠ Self-corrected after 400 Bad Request. Retried with catalog-only fields. ✓"):
+            async for chunk in emit("\n\n[on_tool_end] ⚠ Self-corrected after 400 Bad Request (dropped hint filters, kept $select). ✓"):
                 yield chunk
 
-        async for chunk in emit(f"\n\n[on_tool_end] SAP returned **{len(result['data'])}** records visible to **{employee_id}** (SU01 auth enforced):"):
+        async for chunk in emit(
+            f"\n\n[on_tool_end] SAP returned **{len(result['data'])}** records visible to **{employee_id}** (SU01 auth enforced):"
+        ):
             yield chunk
 
-        # Emit structured tabular payload — DataCard renders this instantly
         yield f"data: {json.dumps({'type': 'tabular', 'data': result['data'], 'entity': result['entity']})}\n\n"
 
-    # ── on_llm_stream: fallback conversational ────────────────────────────────
+    # ── Fallback: conversational ───────────────────────────────────────────────
     else:
         history_note = f"(Session context: {len(history)} messages.) " if history else ""
         tools_list = ", ".join(CATALOG.keys()) if CATALOG else "SalesOrderSet, EmployeeSet, ProcurementSet"
         msg = (
             f"Hello **{employee_id}**! {history_note}I am **CIRA**, your SAP Intelligence Agent.\n\n"
-            f"Your session token has been exchanged for a user-scoped SAP access token "
-            f"via OAuth2 SAML Bearer. SAP enforces your authorization profile on every query.\n\n"
+            f"Your session is authenticated with a user-delegated SAP token. "
+            f"SAP enforces your authorization profile on every query.\n\n"
             f"**Available tools:**\n"
             f"- `query_sap_odata` — {tools_list}\n"
             f"- `query_company_docs` — ChromaDB vector search (policies & SOPs)\n\n"

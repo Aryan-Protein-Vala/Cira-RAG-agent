@@ -43,10 +43,15 @@ function ThemeToggle({ theme, onToggle }: { theme: 'light' | 'dark'; onToggle: (
   )
 }
 
-/** Mint a mock session token: base64(JSON) matching what auth.py decode_mock_token expects. */
+/** 
+ * Fix 1.3: UTF-8 safe base64 token — btoa() crashes on non-Latin1 chars.
+ * Uses TextEncoder + Uint8Array → safe for any Unicode employee ID.
+ */
 function mintSessionToken(employeeId: string): string {
   const payload = JSON.stringify({ employee_id: employeeId, iat: Math.floor(Date.now() / 1000) });
-  return btoa(payload);
+  const bytes = new TextEncoder().encode(payload);
+  const binString = Array.from(bytes, (b) => String.fromCodePoint(b)).join('');
+  return btoa(binString);
 }
 
 function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: string) => void; theme: 'light' | 'dark'; onToggle: () => void }) { 
@@ -245,6 +250,7 @@ export default function Page() {
   const [isThinking, setIsThinking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null); 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);  // Fix 6.2: cancel in-flight streams on session switch
 
   useEffect(() => { 
     const saved = window.localStorage.getItem('cira-theme') as 'light' | 'dark' | null; 
@@ -273,17 +279,23 @@ export default function Page() {
     setInput(''); 
     setIsThinking(true);
 
+    // Fix 6.2: Cancel any previous in-flight stream before starting a new one
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     const streamingId = Date.now();
-    setMessages((current) => [...current, { role: 'assistant', content: '', _streamingId: streamingId }]);
+    setMessages((current) => [...current, { role: 'assistant', content: '', _streamingId: streamingId } as any]);
 
     try {
       const res = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`,  // Token pass-through — never a master credential
+          'Authorization': `Bearer ${sessionToken}`,
         },
-        body: JSON.stringify({ query: value, session_id: sessionId })
+        body: JSON.stringify({ query: value, session_id: sessionId }),
+        signal: abortController.signal,  // Fix 6.2: fetch is cancellable
       });
 
       if (!res.body) throw new Error('No stream');
@@ -291,13 +303,7 @@ export default function Page() {
       const decoder = new TextDecoder();
       let buffer = '';
 
-      while (true) {
-        const { done, value: chunk } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
+      const processLines = (lines: string[]) => {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           try {
@@ -317,13 +323,29 @@ export default function Page() {
             }
           } catch {}
         }
+      };
+
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) {
+          // Fix 6.1: Drain remaining buffer after stream ends (handles streams without trailing \n)
+          if (buffer.trim()) processLines([buffer]);
+          break;
+        }
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        processLines(lines);
       }
-    } catch (err) {
-      setMessages((current) => current.map((m: any) =>
-        m._streamingId === streamingId
-          ? { ...m, content: 'Sorry, I encountered an error connecting to the FastAPI backend.' }
-          : m
-      ));
+    } catch (err: any) {
+      // AbortError is expected when user switches chat — not a real error
+      if (err?.name !== 'AbortError') {
+        setMessages((current) => current.map((m: any) =>
+          m._streamingId === streamingId
+            ? { ...m, content: 'Sorry, I encountered an error connecting to the FastAPI backend.' }
+            : m
+        ));
+      }
     } finally {
       setIsThinking(false);
     }
