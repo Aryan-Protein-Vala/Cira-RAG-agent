@@ -422,30 +422,32 @@ export default function Page() {
           </div>
         </header>
         <div className="chat-scroll" ref={scrollRef}>
-          <div className="chat-intro">
-            <div className="intro-icon"><Sparkles size={20} /></div>
-            <div><h1>Good morning, Alex.</h1><p>Ask questions about your SAP data in plain language.</p></div>
-          </div>
-          {messages.map((message, index) => (
-            <div className={`message-row ${message.role}`} key={index}>
-              <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
-              <div className="message-content">
-                <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>· {message.timestamp || 'just now'}</small></span>
-                <div className="bubble">
-                  {message.role === 'assistant' ? (
-                    message.content === '' && isThinking && index === messages.length - 1 ? (
-                      <div className="typing-indicator"><span /><span /><span /></div>
+          <div className="chat-container">
+            <div className="chat-intro">
+              <div className="intro-icon"><Sparkles size={20} /></div>
+              <div><h1>Good morning, Alex.</h1><p>Ask questions about your SAP data in plain language.</p></div>
+            </div>
+            {messages.map((message, index) => (
+              <div className={`message-row ${message.role}`} key={index}>
+                <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
+                <div className="message-content">
+                  <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>· {message.timestamp || 'just now'}</small></span>
+                  <div className="bubble">
+                    {message.role === 'assistant' ? (
+                      message.content === '' && isThinking && index === messages.length - 1 ? (
+                        <div className="typing-indicator"><span /><span /><span /></div>
+                      ) : (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                      )
                     ) : (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-                    )
-                  ) : (
-                    message.content
-                  )}
-                  {message.data && <DataCard payload={message.data} entity={message.entity} />}
+                      message.content
+                    )}
+                    {message.data && <DataCard payload={message.data} entity={message.entity} />}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
         <footer className="composer-wrap">
           <div className="composer">
