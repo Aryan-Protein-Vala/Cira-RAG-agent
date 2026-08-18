@@ -212,7 +212,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button> */}
           </div>
-          <div className="history-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
+          <div className="history-search"><BrandMark /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
           <div className="history">
             <div className="history-group">
               {filtered.map((session) => (
@@ -258,6 +258,7 @@ export default function Page() {
   const [sessions, setSessions] = useState(initialSessions); 
   const [theme, setTheme] = useState<'light' | 'dark'>('light'); 
   const [isThinking, setIsThinking] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null); 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);  // Fix 6.2: cancel in-flight streams on session switch
@@ -286,11 +287,18 @@ export default function Page() {
     window.localStorage.setItem('cira-theme', theme) 
   }, [theme]); 
 
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setShouldAutoScroll(isNearBottom);
+  };
+
   useEffect(() => {
-    if (scrollRef.current) {
+    if (shouldAutoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isThinking]);
+  }, [messages, isThinking, shouldAutoScroll]);
 
   const toggleTheme = () => setTheme((value) => value === 'dark' ? 'light' : 'dark'); 
   
@@ -443,7 +451,7 @@ export default function Page() {
             <button className="secondary-button" onClick={() => selectChat('New conversation')}><Plus size={16} /> New chat</button>
           </div>
         </header>
-        <div className="chat-scroll" ref={scrollRef}>
+        <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
           <div className="chat-container">
             <div className="chat-intro">
               <div className="intro-icon"><Sparkles size={20} /></div>
@@ -476,7 +484,7 @@ export default function Page() {
             <button className="icon-button" onClick={() => fileRef.current?.click()} aria-label="Attach file"><Paperclip size={18} /></button>
             <input ref={fileRef} type="file" hidden />
             <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); submit() } }} placeholder="Ask anything about your SAP data..." rows={1} />
-            <button className="send-button" disabled={isThinking} onClick={submit} aria-label="Send message"><ArrowUp size={18} /></button>
+            <button className="send-button" disabled={isThinking} onClick={submit} aria-label="Send message"><BrandMark /></button>
           </div>
           <p className="composer-note">CIRA can make mistakes. Verify important data.</p>
         </footer>

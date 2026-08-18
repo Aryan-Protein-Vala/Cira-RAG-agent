@@ -7,21 +7,7 @@ export const metadata: Metadata = {
   description: 'Securely query enterprise SAP data with natural language.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25"><rect x="4" y="8" width="4" height="12" rx="2" fill="%23e69a9d" transform="skewX(-16)" opacity="0.48" /><rect x="10" y="3" width="4" height="19" rx="2" fill="%23e69a9d" transform="skewX(-16)" /><rect x="16" y="6" width="4" height="15" rx="2" fill="%23e69a9d" transform="skewX(-16)" opacity="0.75" /></svg>',
   },
 }
 
