@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import ParticlesBackground from './ParticlesBackground'
 
 export const metadata: Metadata = {
   title: 'CIRA — SAP Data Intelligence',
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
+        <ParticlesBackground />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

@@ -239,6 +239,9 @@ async def generate_title(
     from agent import llm
     from langchain_core.messages import SystemMessage, HumanMessage
     
+    # Fix 2: Auth Hardening — prevent unauthenticated OpenRouter usage
+    validate_and_extract(credentials)
+    
     messages = [
         SystemMessage(content="You are a helpful assistant. Generate a short, 2-4 word summary title for the following user message. Do not use quotes or punctuation. Respond ONLY with the title."),
         HumanMessage(content=request.prompt)

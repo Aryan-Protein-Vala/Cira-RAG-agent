@@ -17,7 +17,7 @@ const fallbackDataPayload = {
 }
 
 type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string; timestamp?: string }
-type Session = { id: number; title: string; date: string }
+type Session = { id: string; title: string; date: string }
 
 const initialMessages: Message[] = []
 const initialSessions: Session[] = []
@@ -53,8 +53,10 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: stri
   const ADMIN_PASSWORD = 'asdfghjkl;';
 
   return (
-    <main className="login-shell">
-      <div className="login-top">
+    <>
+      <div className="chat-blur-film" style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(255, 255, 255, 0.4)', backdropFilter: 'blur(12px)' }} />
+      <main className="login-shell">
+        <div className="login-top">
         <div className="sidebar-brand"><BrandMark /><span>CIRA</span></div>
         <ThemeToggle theme={theme} onToggle={onToggle} />
       </div>
@@ -101,7 +103,8 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: stri
         </form>
         <p className="secure-note"><ShieldCheck size={13} /> SSO protected · Your queries are private</p>
       </section>
-    </main>
+      </main>
+    </>
   )
 }
 
@@ -159,23 +162,23 @@ function DataCard({ payload, entity }: { payload?: any; entity?: string }) {
   )
 }
 
-function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, setSessions, theme, onTheme, sessionToken, employeeId }: { collapsed: boolean; onToggle: () => void; onLogout: () => void; active: string; onSelect: (title: string) => void; sessions: Session[]; setSessions: (sessions: Session[]) => void; theme: 'light' | 'dark'; onTheme: () => void; sessionToken: string; employeeId: string; }) { 
+function Sidebar({ collapsed, onToggle, onLogout, activeId, onSelect, sessions, setSessions, theme, onTheme, sessionToken, employeeId }: { collapsed: boolean; onToggle: () => void; onLogout: () => void; activeId: string; onSelect: (id: string, title: string) => void; sessions: Session[]; setSessions: (sessions: Session[]) => void; theme: 'light' | 'dark'; onTheme: () => void; sessionToken: string; employeeId: string; }) { 
   const [query, setQuery] = useState(''); 
-  const [menu, setMenu] = useState<number | null>(null); 
-  const [editing, setEditing] = useState<number | null>(null); 
+  const [menu, setMenu] = useState<string | null>(null); 
+  const [editing, setEditing] = useState<string | null>(null); 
   const [editValue, setEditValue] = useState(''); 
   const filtered = useMemo(() => sessions.filter((s) => s.title.toLowerCase().includes(query.toLowerCase())), [query, sessions]); 
   
   const rename = (session: Session) => { setEditing(session.id); setEditValue(session.title); setMenu(null) }; 
-  const saveRename = async (id: number, oldTitle: string) => { 
+  const saveRename = async (id: string, oldTitle: string) => { 
     const title = editValue.trim(); 
     if (title && title !== oldTitle) {
       setSessions(sessions.map((s) => s.id === id ? { ...s, title } : s));
       try {
-        await fetch(`http://localhost:8000/session/${employeeId}__${oldTitle}`, {
+        await fetch(`http://localhost:8000/session/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-          body: JSON.stringify({ title: `${employeeId}__${title}` })
+          body: JSON.stringify({ title })
         });
       } catch (err) { console.error('Rename failed', err) }
     }
@@ -184,9 +187,9 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
   const remove = async (session: Session) => { 
     setSessions(sessions.filter((s) => s.id !== session.id)); 
     setMenu(null); 
-    if (active === session.title) onSelect('New conversation');
+    if (activeId === session.id) onSelect('new', 'New conversation');
     try {
-      await fetch(`http://localhost:8000/session/${employeeId}__${session.title}`, {
+      await fetch(`http://localhost:8000/session/${session.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       });
@@ -204,7 +207,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
       {!collapsed && (
         <>
           <div className="sidebar-actions">
-            <button className="new-chat" onClick={() => onSelect('New conversation')}>
+            <button className="new-chat" onClick={() => onSelect('new', 'New conversation')}>
               <Plus size={16} /> 
               <span>New chat</span>
             </button>
@@ -216,7 +219,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
           <div className="history">
             <div className="history-group">
               {filtered.map((session) => (
-                <div className={`history-item ${active === session.title ? 'active' : ''}`} key={session.id} onClick={() => editing !== session.id && onSelect(session.title)}>
+                <div className={`history-item ${activeId === session.id ? 'active' : ''}`} key={session.id} onClick={() => editing !== session.id && onSelect(session.id, session.title)}>
                   <MessageSquare size={15} />
                   <div className="history-title">
                     {editing === session.id ? (
@@ -253,13 +256,14 @@ export default function Page() {
   const [employeeId, setEmployeeId] = useState('');
   const [sessionToken, setSessionToken] = useState('');  // Bearer token passed on every API call
   const [collapsed, setCollapsed] = useState(false); 
+  const [activeId, setActiveId] = useState<string>('new'); 
   const [active, setActive] = useState('New conversation'); 
   const [messages, setMessages] = useState<Message[]>(initialMessages); 
   const [input, setInput] = useState(''); 
   const [sessions, setSessions] = useState(initialSessions); 
   const [theme, setTheme] = useState<'light' | 'dark'>('light'); 
   const [isThinking, setIsThinking] = useState(false);
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const autoScrollRef = useRef(true);
   const fileRef = useRef<HTMLInputElement>(null); 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);  // Fix 6.2: cancel in-flight streams on session switch
@@ -283,10 +287,10 @@ export default function Page() {
         .then(res => res.json())
         .then(data => {
           if (data.sessions) {
-            setSessions(data.sessions.map((s: any, idx: number) => ({
-              id: idx,
-              title: s.title.replace(`${employeeId}__`, ''), // Strip prefix
-              date: 'Today' // Mocking date for simplicity
+            setSessions(data.sessions.map((s: any) => ({
+              id: s.id,
+              title: s.title,
+              date: 'Today'
             })));
           }
         })
@@ -303,14 +307,14 @@ export default function Page() {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
-    setShouldAutoScroll(isNearBottom);
+    autoScrollRef.current = isNearBottom;
   };
 
   useEffect(() => {
-    if (shouldAutoScroll && scrollRef.current) {
+    if (autoScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isThinking, shouldAutoScroll]);
+  }, [messages, isThinking]);
 
   const toggleTheme = () => setTheme((value) => value === 'dark' ? 'light' : 'dark'); 
   
@@ -318,12 +322,21 @@ export default function Page() {
     const value = input.trim(); 
     if (!value || isThinking) return; 
 
+    autoScrollRef.current = true;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+
+    let currentSessionId = activeId;
     let chatTitle = active;
-    const isNew = active === 'New conversation';
+    const isNew = activeId === 'new';
+    
     if (isNew) {
+      currentSessionId = crypto.randomUUID();
+      setActiveId(currentSessionId);
       chatTitle = value.slice(0, 30) + (value.length > 30 ? '...' : '');
       setActive(chatTitle);
-      setSessions(current => [{ id: Date.now(), title: chatTitle, date: 'Today' }, ...current]);
+      setSessions(current => [{ id: currentSessionId, title: chatTitle, date: 'Today' }, ...current]);
       
       // Fire background title generation
       fetch('http://localhost:8000/generate_title', {
@@ -334,20 +347,20 @@ export default function Page() {
       .then(res => res.json())
       .then(data => {
         if (data.title) {
-          fetch(`http://localhost:8000/session/${employeeId}__${chatTitle}`, {
+          fetch(`http://localhost:8000/session/${currentSessionId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
             body: JSON.stringify({ title: data.title })
           }).then(() => {
             setActive(curr => curr === chatTitle ? data.title : curr);
-            setSessions(curr => curr.map(s => s.title === chatTitle ? { ...s, title: data.title } : s));
+            setSessions(curr => curr.map(s => s.id === currentSessionId ? { ...s, title: data.title } : s));
           });
         }
       })
       .catch(console.error);
     }
     
-    const sessionId = `${employeeId}__${chatTitle}`;
+    const sessionId = currentSessionId;
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     setMessages((current) => [...current, { role: 'user', content: value, timestamp }]); 
@@ -426,15 +439,22 @@ export default function Page() {
     }
   }; 
   
-  const selectChat = async (title: string) => { 
+  const selectChat = async (id: string, title: string) => { 
+    if (activeId === id) return;
+    
+    abortControllerRef.current?.abort();
+
+    setActiveId(id);
     setActive(title);
-    if (title === 'New conversation') {
+    setCollapsed(true);
+
+    if (id === 'new') {
       setMessages([]);
       return;
     }
-    const sessionId = `${employeeId}__${title}`;
+
     try {
-      const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(sessionId)}`, {
+      const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(id)}`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` },
       });
       const data = await res.json();
@@ -463,6 +483,7 @@ export default function Page() {
     setSessionToken('');
     setSessions([]);
     setMessages([]);
+    setActiveId('new');
     setActive('New conversation');
   };
 
@@ -470,16 +491,18 @@ export default function Page() {
   if (!loggedIn) return <Login onLogin={handleLogin} theme={theme} onToggle={toggleTheme} />; 
   
   return (
-    <main className="app-shell">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={handleLogout} active={active} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} sessionToken={sessionToken} employeeId={employeeId} />
-      <section className="chat-shell">
+    <>
+      <div className="chat-blur-film" style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(255, 255, 255, 0.4)', backdropFilter: 'blur(12px)' }} />
+      <main className="app-shell">
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={handleLogout} activeId={activeId} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} sessionToken={sessionToken} employeeId={employeeId} />
+        <section className="chat-shell">
         <header className="chat-header">
           <div className="mobile-title">
             <button className="icon-button mobile-menu" onClick={() => setCollapsed(!collapsed)} aria-label="Open menu"><Menu size={20} /></button>
             <div><span className="eyebrow">RAG WORKSPACE</span><h2>{active}</h2></div>
           </div>
           <div className="header-actions">
-            <button className="secondary-button" onClick={() => selectChat('New conversation')}><Plus size={16} /> New chat</button>
+            <button className="secondary-button" onClick={() => selectChat('new', 'New conversation')}><Plus size={16} /> New chat</button>
           </div>
         </header>
         <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
@@ -520,6 +543,7 @@ export default function Page() {
           <p className="composer-note">CIRA can make mistakes. Verify important data.</p>
         </footer>
       </section>
-    </main>
+      </main>
+    </>
   ) 
 }
