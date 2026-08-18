@@ -43,7 +43,13 @@ function ThemeToggle({ theme, onToggle }: { theme: 'light' | 'dark'; onToggle: (
   )
 }
 
-function Login({ onLogin, theme, onToggle }: { onLogin: (id: string) => void; theme: 'light' | 'dark'; onToggle: () => void }) { 
+/** Mint a mock session token: base64(JSON) matching what auth.py decode_mock_token expects. */
+function mintSessionToken(employeeId: string): string {
+  const payload = JSON.stringify({ employee_id: employeeId, iat: Math.floor(Date.now() / 1000) });
+  return btoa(payload);
+}
+
+function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: string) => void; theme: 'light' | 'dark'; onToggle: () => void }) { 
   const [employee, setEmployee] = useState(''); 
   const [password, setPassword] = useState(''); 
   return (
@@ -57,7 +63,11 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string) => void; th
         <div className="eyebrow"><ShieldCheck size={14} /> INTERNAL DATA ACCESS</div>
         <h1 id="login-title">Ask your enterprise<br /><em>anything.</em></h1>
         <p className="login-copy">Securely query SAP data with natural language. Built for clarity, speed, and control.</p>
-        <form onSubmit={(event) => { event.preventDefault(); onLogin(employee || 'EMP-20481') }}>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          const id = employee.trim() || 'EMP-20481';
+          onLogin(id, mintSessionToken(id));
+        }}>
           <label>Employee ID
             <input value={employee} onChange={(event) => setEmployee(event.target.value)} placeholder="e.g. EMP-20481" />
           </label>
@@ -197,6 +207,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
 export default function Page() { 
   const [loggedIn, setLoggedIn] = useState(false); 
   const [employeeId, setEmployeeId] = useState('EMP-20481');
+  const [sessionToken, setSessionToken] = useState('');  // Bearer token passed on every API call
   const [collapsed, setCollapsed] = useState(false); 
   const [active, setActive] = useState('Q3 procurement variance'); 
   const [messages, setMessages] = useState<Message[]>(initialMessages); 
@@ -240,7 +251,10 @@ export default function Page() {
     try {
       const res = await fetch('http://localhost:8000/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`,  // Token pass-through — never a master credential
+        },
         body: JSON.stringify({ query: value, session_id: sessionId })
       });
 
@@ -299,7 +313,9 @@ export default function Page() {
     }
     const sessionId = `${employeeId}__${title}`;
     try {
-      const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(sessionId)}`);
+      const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(sessionId)}`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` },
+      });
       const data = await res.json();
       if (data.messages && data.messages.length > 0) {
         setMessages(data.messages.map((m: any) => ({ role: m.role, content: m.content, data: m.data })));
@@ -311,7 +327,7 @@ export default function Page() {
     }
   }; 
   
-  if (!loggedIn) return <Login onLogin={(id) => { setEmployeeId(id); setLoggedIn(true); }} theme={theme} onToggle={toggleTheme} />; 
+  if (!loggedIn) return <Login onLogin={(id, token) => { setEmployeeId(id); setSessionToken(token); setLoggedIn(true); }} theme={theme} onToggle={toggleTheme} />; 
   
   return (
     <main className="app-shell">
