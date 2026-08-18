@@ -16,7 +16,7 @@ const fallbackDataPayload = {
   ] 
 }
 
-type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string }
+type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string; timestamp?: string }
 type Session = { id: number; title: string; date: string }
 
 const initialMessages: Message[] = []
@@ -214,30 +214,27 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
           </div>
           <div className="history-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
           <div className="history">
-            {['Today', 'Previous 7 days'].map((date) => (
-              <div className="history-group" key={date}>
-                <span className="group-label">{date}</span>
-                {filtered.filter((s) => s.date === date).map((session) => (
-                  <div className={`history-item ${active === session.title ? 'active' : ''}`} key={session.id} onClick={() => editing !== session.id && onSelect(session.title)}>
-                    <MessageSquare size={15} />
-                    <div className="history-title">
-                      {editing === session.id ? (
-                        <input autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onBlur={() => saveRename(session.id, session.title)} onKeyDown={(event) => { if (event.key === 'Enter') saveRename(session.id, session.title); if (event.key === 'Escape') setEditing(null) }} />
-                      ) : (
-                        <span>{session.title}</span>
-                      )}
-                    </div>
-                    <button className="history-menu-button" onClick={(event) => { event.stopPropagation(); setMenu(menu === session.id ? null : session.id) }} aria-label={`Options for ${session.title}`}><MoreHorizontal size={16} /></button>
-                    {menu === session.id && (
-                      <div className="history-menu" onClick={(event) => event.stopPropagation()}>
-                        <button onClick={() => rename(session)}><Pencil size={14} /> Rename</button>
-                        <button className="delete-action" onClick={() => remove(session)}><Trash2 size={14} /> Delete</button>
-                      </div>
+            <div className="history-group">
+              {filtered.map((session) => (
+                <div className={`history-item ${active === session.title ? 'active' : ''}`} key={session.id} onClick={() => editing !== session.id && onSelect(session.title)}>
+                  <MessageSquare size={15} />
+                  <div className="history-title">
+                    {editing === session.id ? (
+                      <input autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onBlur={() => saveRename(session.id, session.title)} onKeyDown={(event) => { if (event.key === 'Enter') saveRename(session.id, session.title); if (event.key === 'Escape') setEditing(null) }} />
+                    ) : (
+                      <span>{session.title}</span>
                     )}
                   </div>
-                ))}
-              </div>
-            ))}
+                  <button className="history-menu-button" onClick={(event) => { event.stopPropagation(); setMenu(menu === session.id ? null : session.id) }} aria-label={`Options for ${session.title}`}><MoreHorizontal size={16} /></button>
+                  {menu === session.id && (
+                    <div className="history-menu" onClick={(event) => event.stopPropagation()}>
+                      <button onClick={() => rename(session)}><Pencil size={14} /> Rename</button>
+                      <button className="delete-action" onClick={() => remove(session)}><Trash2 size={14} /> Delete</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           <div className="profile">
             <div className="avatar">AM</div>
@@ -300,9 +297,18 @@ export default function Page() {
   const submit = async () => { 
     const value = input.trim(); 
     if (!value || isThinking) return; 
+
+    let chatTitle = active;
+    if (active === 'New conversation') {
+      chatTitle = value.slice(0, 30) + (value.length > 30 ? '...' : '');
+      setActive(chatTitle);
+      setSessions(current => [{ id: Date.now(), title: chatTitle, date: 'Today' }, ...current]);
+    }
     
-    const sessionId = `${employeeId}__${active}`;
-    setMessages((current) => [...current, { role: 'user', content: value }]); 
+    const sessionId = `${employeeId}__${chatTitle}`;
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    setMessages((current) => [...current, { role: 'user', content: value, timestamp }]); 
     setInput(''); 
     setIsThinking(true);
 
@@ -312,7 +318,7 @@ export default function Page() {
     abortControllerRef.current = abortController;
 
     const streamingId = Date.now();
-    setMessages((current) => [...current, { role: 'assistant', content: '', _streamingId: streamingId } as any]);
+    setMessages((current) => [...current, { role: 'assistant', content: '', timestamp, _streamingId: streamingId } as any]);
 
     try {
       const res = await fetch('http://localhost:8000/chat', {
@@ -424,7 +430,7 @@ export default function Page() {
             <div className={`message-row ${message.role}`} key={index}>
               <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
               <div className="message-content">
-                <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>{message.role === 'assistant' ? '· just now' : ''}</small></span>
+                <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>· {message.timestamp || 'just now'}</small></span>
                 <div className="bubble">
                   {message.role === 'assistant' ? (
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
