@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, Menu, ChevronLeft } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Send, Plus, Search, MoreVertical, Compass, Settings } from 'lucide-react';
 import { DataCard } from './DataCard';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -73,90 +70,174 @@ export function ChatLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+    <div className="app-shell">
       {/* Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-zinc-900 border-r border-zinc-800 flex flex-col overflow-hidden`}>
-        <div className="p-4 border-b border-zinc-800 flex justify-between items-center h-16 shrink-0">
-          <h2 className="font-semibold text-lg whitespace-nowrap">Chat History</h2>
-          <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)} className="text-zinc-400 hover:text-white">
-            <ChevronLeft className="w-5 h-5" />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1 p-2">
-          <div className="p-2 mb-2 rounded-md bg-zinc-800/50 text-sm cursor-pointer hover:bg-zinc-800 transition-colors">
-            Current Session
+      <div className={`sidebar ${isSidebarOpen ? '' : 'collapsed'}`}>
+        <div className="sidebar-top">
+          <div className="sidebar-brand">
+            <div className="brand-mark">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span>CIRA</span>
           </div>
-        </ScrollArea>
+          <button className="icon-button" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15.25 10.75L12 14.25L8.75 10.75"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div className="sidebar-actions">
+          <button className="new-chat">
+            <Plus className="w-4 h-4" />
+            <span>New chat</span>
+          </button>
+          <button className="theme-toggle">
+            <Search className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="history">
+          <div className="history-group">
+            <div className="group-label">Today</div>
+            <button className="history-item active">
+              <div className="history-title">
+                <span>SAP Data Query</span>
+              </div>
+              <div className="history-menu-button">
+                <MoreVertical className="w-4 h-4" />
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="profile">
+            <div className="avatar">JD</div>
+            <div className="profile-info">
+              <strong>John Doe</strong>
+              <span>EMP-1042</span>
+            </div>
+            <button className="icon-button">
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">
-        <div className="h-16 border-b border-zinc-800 flex items-center px-4 shrink-0 shadow-sm z-10 bg-zinc-950">
-          {!isSidebarOpen && (
-            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="mr-2 text-zinc-400 hover:text-white">
-              <Menu className="w-5 h-5" />
-            </Button>
-          )}
-          <h1 className="font-semibold text-lg bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">CIRA Agent</h1>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 md:p-8" ref={scrollRef}>
-          <div className="max-w-4xl mx-auto space-y-6">
-            {messages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-indigo-600' : 'bg-zinc-800 border border-zinc-700'}`}>
-                    {msg.role === 'user' ? <User className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-indigo-400" />}
-                  </div>
-                  <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`px-4 py-3 rounded-2xl ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-sm'}`}>
-                      <div className="prose prose-invert max-w-none text-sm">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                    {msg.type === 'tabular' && msg.data && (
-                      <DataCard data={msg.data} />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="flex gap-3 max-w-[85%]">
-                  <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                    <Bot className="w-5 h-5 text-indigo-400" />
-                  </div>
-                  <div className="px-4 py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-tl-sm flex items-center gap-2">
-                    <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce delay-100" />
-                    <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce delay-200" />
-                  </div>
-                </div>
-              </div>
-            )}
+      <div className="chat-shell">
+        <div className="chat-header">
+          <div className="mobile-title">
+            <button className="icon-button mobile-menu" onClick={() => setIsSidebarOpen(true)}>
+              <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.75 5.75H19.25M4.75 12H19.25M4.75 18.25H19.25"></path>
+              </svg>
+            </button>
+            <h2>SAP Intelligence</h2>
+          </div>
+          <div className="header-actions">
+            <button className="secondary-button">
+              <Compass className="w-4 h-4" />
+              <span>Explore Data</span>
+            </button>
           </div>
         </div>
 
-        <div className="p-4 bg-zinc-950 border-t border-zinc-800 shrink-0">
-          <div className="max-w-4xl mx-auto relative">
-            <Input
+        <div className="chat-scroll" ref={scrollRef}>
+          <div className="chat-intro">
+            <div className="intro-icon">
+              <Compass className="w-5 h-5" />
+            </div>
+            <div>
+              <h1>How can I help you today?</h1>
+              <p>Query SAP OData, analyze trends, or request tabular data exports.</p>
+            </div>
+          </div>
+
+          {messages.map(msg => (
+            <div key={msg.id} className={`message-row ${msg.role === 'user' ? 'user' : ''}`}>
+              <div className="message-avatar">
+                {msg.role === 'user' ? (
+                  'JD'
+                ) : (
+                  <div className="brand-mark">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                )}
+              </div>
+              <div className="message-content">
+                <div className="message-author">
+                  {msg.role === 'user' ? (
+                    <small>You</small>
+                  ) : (
+                    <small>CIRA</small>
+                  )}
+                </div>
+                <div className="bubble">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+                {msg.type === 'tabular' && msg.data && (
+                  <DataCard data={msg.data} />
+                )}
+              </div>
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="message-row">
+              <div className="message-avatar">
+                <div className="brand-mark">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+              <div className="message-content">
+                <div className="message-author">
+                  <small>CIRA</small>
+                </div>
+                <div className="bubble text-zinc-500">
+                  Thinking...
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="composer-wrap">
+          <div className="composer">
+            <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder="Ask me anything..."
-              className="w-full pr-12 bg-zinc-900 border-zinc-800 text-white h-12 rounded-xl focus-visible:ring-indigo-500"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              placeholder="Ask anything..."
+              rows={1}
             />
-            <Button 
+            <button 
               onClick={sendMessage}
               disabled={isLoading || !input.trim()}
-              size="icon" 
-              className="absolute right-1 top-1 bottom-1 h-10 w-10 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white disabled:opacity-50"
+              className="send-button"
             >
               <Send className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
-          <div className="text-center mt-2">
-            <span className="text-xs text-zinc-500">CIRA RAG Agent can make mistakes. Verify important information.</span>
+          <div className="composer-note">
+            CIRA RAG Agent can make mistakes. Consider verifying important information.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
