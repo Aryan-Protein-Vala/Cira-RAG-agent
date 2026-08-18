@@ -1,24 +1,56 @@
 {
-  "catalog": {
-    "Sales": {
-      "table": "SALES_ORDERS",
-      "columns": {
-        "OrderID": "String",
-        "CustomerName": "String",
-        "TotalAmount": "Decimal",
-        "OrderDate": "Date",
-        "Status": "String"
-      }
+  "SalesOrderSet": {
+    "description": "SAP Sales Orders entity set",
+    "columns": {
+      "SalesOrderID": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "CustomerName": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "NetAmount": { "type": "Decimal", "odata_type": "Edm.Decimal", "filterable": true, "selectable": true },
+      "Currency": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "OrderDate": { "type": "Date", "odata_type": "Edm.DateTime", "filterable": true, "selectable": true },
+      "DeliveryDate": { "type": "Date", "odata_type": "Edm.DateTime", "filterable": true, "selectable": true },
+      "Status": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "Plant": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true }
     },
-    "HR": {
-      "table": "EMPLOYEES",
-      "columns": {
-        "EmployeeID": "String",
-        "FirstName": "String",
-        "LastName": "String",
-        "Department": "String",
-        "HireDate": "Date"
-      }
-    }
+    "mock_data": [
+      { "SalesOrderID": "SO-10001", "CustomerName": "Acme Corp", "NetAmount": 48200.00, "Currency": "USD", "OrderDate": "2024-07-02", "DeliveryDate": "2024-07-15", "Status": "Delivered", "Plant": "DE-1000" },
+      { "SalesOrderID": "SO-10002", "CustomerName": "Global Supplies", "NetAmount": 12500.00, "Currency": "USD", "OrderDate": "2024-08-10", "DeliveryDate": "2024-08-22", "Status": "Processing", "Plant": "US-2200" },
+      { "SalesOrderID": "SO-10003", "CustomerName": "Pacific Traders", "NetAmount": 7800.00, "Currency": "SGD", "OrderDate": "2024-09-01", "DeliveryDate": "2024-09-14", "Status": "Pending", "Plant": "SG-3100" }
+    ]
+  },
+  "EmployeeSet": {
+    "description": "SAP HR Employee entity set",
+    "columns": {
+      "EmployeeID": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "FirstName": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "LastName": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "Department": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "CostCenter": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "HireDate": { "type": "Date", "odata_type": "Edm.DateTime", "filterable": true, "selectable": true },
+      "Salary": { "type": "Decimal", "odata_type": "Edm.Decimal", "filterable": false, "selectable": true },
+      "JobTitle": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true }
+    },
+    "mock_data": [
+      { "EmployeeID": "EMP-10001", "FirstName": "Alex", "LastName": "Morgan", "Department": "Procurement", "CostCenter": "CC-4400", "HireDate": "2019-03-15", "Salary": 92000.00, "JobTitle": "Senior Buyer" },
+      { "EmployeeID": "EMP-10002", "FirstName": "Sara", "LastName": "Chen", "Department": "Finance", "CostCenter": "CC-1100", "HireDate": "2021-06-01", "Salary": 78000.00, "JobTitle": "Financial Analyst" },
+      { "EmployeeID": "EMP-10003", "FirstName": "James", "LastName": "Patel", "Department": "Logistics", "CostCenter": "CC-3300", "HireDate": "2020-11-20", "Salary": 85000.00, "JobTitle": "Supply Chain Manager" }
+    ]
+  },
+  "ProcurementSet": {
+    "description": "SAP MM Procurement / Purchase Orders entity set",
+    "columns": {
+      "PurchaseOrderID": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "VendorName": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "MaterialName": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "Quantity": { "type": "Integer", "odata_type": "Edm.Int32", "filterable": true, "selectable": true },
+      "NetAmount": { "type": "Decimal", "odata_type": "Edm.Decimal", "filterable": true, "selectable": true },
+      "Plant": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true },
+      "OrderDate": { "type": "Date", "odata_type": "Edm.DateTime", "filterable": true, "selectable": true },
+      "Status": { "type": "String", "odata_type": "Edm.String", "filterable": true, "selectable": true }
+    },
+    "mock_data": [
+      { "PurchaseOrderID": "PO-5001", "VendorName": "RawMat GmbH", "MaterialName": "Steel Rods", "Quantity": 500, "NetAmount": 125000.00, "Plant": "DE-1000", "OrderDate": "2024-07-01", "Status": "Invoiced" },
+      { "PurchaseOrderID": "PO-5002", "VendorName": "ChemSupply Ltd", "MaterialName": "Industrial Solvent", "Quantity": 200, "NetAmount": 43000.00, "Plant": "US-2200", "OrderDate": "2024-08-05", "Status": "Open" },
+      { "PurchaseOrderID": "PO-5003", "VendorName": "AsiaParts Co", "MaterialName": "Circuit Boards", "Quantity": 1000, "NetAmount": 88000.00, "Plant": "SG-3100", "OrderDate": "2024-09-10", "Status": "Partially Delivered" }
+    ]
   }
 }

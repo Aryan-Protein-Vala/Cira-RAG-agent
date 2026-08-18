@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, Download, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, MoreHorizontal, Moon, Paperclip, Pencil, Plus, Search, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { exportToExcel } from '@/lib/export'
 
 const fallbackDataPayload = { 
   report: 'Q3 Procurement Variance', 
@@ -15,7 +16,7 @@ const fallbackDataPayload = {
   ] 
 }
 
-type Message = { role: 'user' | 'assistant'; content: string; data?: any }
+type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string }
 type Session = { id: number; title: string; date: string }
 
 const initialMessages: Message[] = [
@@ -71,68 +72,58 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string) => void; th
   )
 }
 
-function DataCard({ payload }: { payload?: any }) { 
-  const dataPayload = payload && Array.isArray(payload) && payload.length > 0 
-    ? {
-        report: 'Dynamic SAP Data',
-        period: 'Current query results',
-        rows: payload.map((row: any) => ({
-          plant: row.id || row.plant || 'N/A',
-          spend: row.product || row.spend || 'N/A',
-          variance: row.status || row.variance || 'N/A'
-        }))
-      }
-    : fallbackDataPayload;
+function DataCard({ payload, entity }: { payload?: any; entity?: string }) { 
+  const rawData: any[] = Array.isArray(payload) && payload.length > 0 ? payload : fallbackDataPayload.rows;
+  const headers = Object.keys(rawData[0]);
+  const previewRows = rawData.slice(0, 3);
+  const [copied, setCopied] = useState(false);
 
-  const [copied, setCopied] = useState(false); 
-  
-  const copy = async () => { 
-    await navigator.clipboard?.writeText(JSON.stringify(dataPayload, null, 2)); 
-    setCopied(true); 
-    window.setTimeout(() => setCopied(false), 1600) 
-  }; 
-  
-  const download = (type: 'json' | 'csv') => { 
-    const body = type === 'json' ? JSON.stringify(dataPayload, null, 2) : `Col1,Col2,Col3\n${dataPayload.rows.map((row: any) => `${row.plant},${row.spend},${row.variance}`).join('\n')}`; 
-    const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' })); 
-    const link = document.createElement('a'); 
-    link.href = url; 
-    link.download = `sap-export.${type}`; 
-    link.click(); 
-    URL.revokeObjectURL(url) 
-  }; 
-  
+  const copy = async () => {
+    await navigator.clipboard?.writeText(JSON.stringify(rawData, null, 2));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  const downloadJSON = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${entity ?? 'sap'}_export.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="data-card">
       <div className="data-card-head">
         <div>
           <span className="data-label"><BarChart3 size={13} /> STRUCTURED RESULT</span>
-          <strong>{dataPayload.report}</strong>
+          <strong>{entity ?? 'SAP Data'}</strong>
         </div>
-        <span className="row-count">{dataPayload.rows.length} rows</span>
+        <span className="row-count">{rawData.length} rows</span>
       </div>
-      <p className="data-period">{dataPayload.period}</p>
+      <p className="data-period">Previewing {previewRows.length} of {rawData.length} records</p>
       <div className="mini-table">
-        <div className="mini-row mini-head">
-          <span>Col 1</span>
-          <span>Col 2</span>
-          <span>Col 3</span>
+        <div className="mini-row mini-head" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 3)}, 1fr)` }}>
+          {headers.slice(0, 3).map((h) => <span key={h}>{h}</span>)}
         </div>
-        {dataPayload.rows.map((row: any, i: number) => (
-          <div className="mini-row" key={i}>
-            <span>{row.plant}</span>
-            <span>{row.spend}</span>
-            <span className={String(row.variance).startsWith('+') ? 'positive' : (String(row.variance).startsWith('-') ? 'negative' : '')}>{row.variance}</span>
+        {previewRows.map((row, i) => (
+          <div className="mini-row" key={i} style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 3)}, 1fr)` }}>
+            {headers.slice(0, 3).map((h) => (
+              <span key={h}>{String(row[h] ?? '')}</span>
+            ))}
           </div>
         ))}
       </div>
       <div className="data-actions">
-        <button onClick={() => download('csv')}><FileSpreadsheet size={14} /> Download Excel</button>
-        <button onClick={() => download('json')}><FileJson size={14} /> Download JSON</button>
+        <button onClick={() => exportToExcel(rawData, `${entity ?? 'sap'}_export.xlsx`)}>
+          <FileSpreadsheet size={14} /> Download Excel
+        </button>
+        <button onClick={downloadJSON}><FileJson size={14} /> Download JSON</button>
         <button onClick={copy}>{copied ? <Check size={14} /> : <Clipboard size={14} />} {copied ? 'Copied' : 'Copy Data'}</button>
       </div>
     </div>
-  ) 
+  )
 }
 
 function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, setSessions, theme, onTheme }: { collapsed: boolean; onToggle: () => void; onLogout: () => void; active: string; onSelect: (title: string) => void; sessions: Session[]; setSessions: (sessions: Session[]) => void; theme: 'light' | 'dark'; onTheme: () => void }) { 
@@ -278,7 +269,7 @@ export default function Page() {
             } else if (parsed.type === 'tabular') {
               setMessages((current) => current.map((m: any) =>
                 m._streamingId === streamingId
-                  ? { ...m, data: parsed.data }
+                  ? { ...m, data: parsed.data, entity: parsed.entity }
                   : m
               ));
             }
@@ -351,7 +342,7 @@ export default function Page() {
                   ) : (
                     message.content
                   )}
-                  {message.data && <DataCard payload={message.data} />}
+                  {message.data && <DataCard payload={message.data} entity={message.entity} />}
                 </div>
               </div>
             </div>
