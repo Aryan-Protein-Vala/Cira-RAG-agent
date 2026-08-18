@@ -433,7 +433,11 @@ export default function Page() {
                 <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>· {message.timestamp || 'just now'}</small></span>
                 <div className="bubble">
                   {message.role === 'assistant' ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                    message.content === '' && isThinking && index === messages.length - 1 ? (
+                      <div className="typing-indicator"><span /><span /><span /></div>
+                    ) : (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                    )
                   ) : (
                     message.content
                   )}
@@ -442,15 +446,6 @@ export default function Page() {
               </div>
             </div>
           ))}
-          {isThinking && (
-             <div className="message-row assistant">
-              <div className="message-avatar"><BrandMark /></div>
-              <div className="message-content">
-                <span className="message-author">CIRA AI <small>· thinking...</small></span>
-                <div className="typing-indicator"><span /><span /><span /></div>
-              </div>
-            </div>
-          )}
         </div>
         <footer className="composer-wrap">
           <div className="composer">
