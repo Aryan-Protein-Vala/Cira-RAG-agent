@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, Download, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, MoreHorizontal, Moon, Paperclip, Pencil, Plus, Search, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
+import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, Moon, MoreHorizontal, Paperclip, Pencil, Plus, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { exportToExcel } from '@/lib/export'

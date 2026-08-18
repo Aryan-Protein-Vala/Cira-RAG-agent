@@ -1,5 +1,6 @@
 import json
 import asyncio
+import httpx
 from typing import AsyncGenerator
 
 try:
@@ -8,37 +9,28 @@ try:
 except FileNotFoundError:
     CATALOG = {}
 
+# Flip to False and set real endpoint when SAP is connected
+MOCK_SAP = True
+SAP_ODATA_BASE_URL = "[SAP_ODATA_BASE_URL]"  # e.g. https://host/sap/opu/odata/sap/
 
-def _resolve_entity_and_columns(query_lower: str) -> tuple[str, list, list]:
-    """
-    Grounding step: Match user query keywords to a catalog entity set.
-    Returns (entity_set_name, selected_columns, mock_data).
-    """
+
+# ── SAP OData Tool ─────────────────────────────────────────────────────────────
+
+def _resolve_entity(query_lower: str) -> str:
     if "employee" in query_lower or "hr" in query_lower or "staff" in query_lower or "salary" in query_lower:
-        entity = "EmployeeSet"
+        return "EmployeeSet"
     elif "procurement" in query_lower or "purchase" in query_lower or "vendor" in query_lower or "po" in query_lower:
-        entity = "ProcurementSet"
-    else:
-        entity = "SalesOrderSet"
+        return "ProcurementSet"
+    return "SalesOrderSet"
 
+
+def _build_odata_query(entity: str, query_lower: str) -> str:
+    """Strict OData query — only uses fields present in sap_schema_catalog.json."""
     if entity not in CATALOG:
-        return entity, [], []
+        return f"{SAP_ODATA_BASE_URL}/{entity}?$top=50"
 
-    schema = CATALOG[entity]
-    columns = list(schema["columns"].keys())
-    data = schema["mock_data"]
-    return entity, columns, data
-
-
-def _build_odata_query(entity: str, columns: list, query_lower: str, sap_token: str) -> str:
-    """
-    Constructs a strict OData query using ONLY catalog-defined fields.
-    Injects the per-user SAP token into the Authorization header representation.
-    In production: this token is passed as Authorization: Bearer <sap_token>
-    in the actual httpx call to the SAP OData endpoint.
-    """
-    base_url = "[SAP_ODATA_BASE_URL]"
-    select = ",".join(columns)
+    all_cols = list(CATALOG[entity]["columns"].keys())
+    select = ",".join(all_cols)
 
     filters = []
     if "delivered" in query_lower or "status" in query_lower:
@@ -49,103 +41,165 @@ def _build_odata_query(entity: str, columns: list, query_lower: str, sap_token: 
         filters.append("year(OrderDate) eq 2024")
 
     filter_str = f"&$filter={' and '.join(filters)}" if filters else ""
-    auth_note = f"[Auth: Bearer {sap_token[:30]}...]" if len(sap_token) > 30 else f"[Auth: Bearer {sap_token}]"
-    return f"GET {base_url}/{entity}?$select={select}{filter_str}&$top=50  {auth_note}"
+    return f"{SAP_ODATA_BASE_URL}/{entity}?$select={select}{filter_str}&$top=50&$format=json"
 
+
+async def query_sap_odata(query: str, sap_token: str, employee_id: str) -> dict:
+    """
+    Executes the SAP OData GET request using the per-user SAP token.
+    
+    Real behavior:
+      - Sends Authorization: Bearer <sap_token> (user-scoped, from OAuth2 SAML exchange)
+      - SAP enforces row-level auth via named-user mapping (SU01 / SAML2)
+      - 403 → user has no authorization for this data object
+      - 400 → hallucinated column → self-correct against catalog and retry
+    
+    Mock behavior (MOCK_SAP=True):
+      - Returns mock_data from sap_schema_catalog.json
+    """
+    entity = _resolve_entity(query.lower())
+    url = _build_odata_query(entity, query.lower())
+
+    if MOCK_SAP:
+        schema = CATALOG.get(entity, {})
+        return {
+            "ok": True,
+            "entity": entity,
+            "url": url,
+            "data": schema.get("mock_data", [])
+        }
+
+    # Real httpx call — uses the per-user SAP token (never a master credential)
+    headers = {
+        "Authorization": f"Bearer {sap_token}",
+        "Accept": "application/json",
+        "sap-client": "100",  # SAP client number — configure per environment
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=headers)
+
+        if resp.status_code == 403:
+            return {
+                "ok": False,
+                "error": "User is unauthorized to access this data.",
+                "entity": entity,
+                "status": 403
+            }
+
+        if resp.status_code == 400:
+            # Attempt self-correction: drop $filter and retry with only $select
+            retry_url = f"{SAP_ODATA_BASE_URL}/{entity}?$select={','.join(list(CATALOG[entity]['columns'].keys()))}&$top=50&$format=json"
+            resp2 = await client.get(retry_url, headers=headers)
+            if resp2.status_code == 200:
+                payload = resp2.json()
+                return {"ok": True, "entity": entity, "url": retry_url, "data": payload.get("d", {}).get("results", []), "self_corrected": True}
+            return {"ok": False, "error": f"SAP returned {resp2.status_code} after self-correction retry.", "entity": entity}
+
+        resp.raise_for_status()
+        payload = resp.json()
+        return {
+            "ok": True,
+            "entity": entity,
+            "url": url,
+            "data": payload.get("d", {}).get("results", [])
+        }
+
+    except httpx.RequestError as exc:
+        return {"ok": False, "error": f"Network error reaching SAP: {exc}", "entity": entity}
+
+
+# ── Vector RAG Tool (ChromaDB mock) ───────────────────────────────────────────
+
+async def query_company_docs(query: str) -> str:
+    """Mock ChromaDB similarity search over unstructured policy documents."""
+    await asyncio.sleep(0.05)
+    return (
+        "**Travel Policy (v2.3)** [similarity: 0.94]\n"
+        "- All flights must be booked **14 days in advance**.\n"
+        "- Business Class requires manager approval above $3,000 net fare.\n"
+        "- Hotel stays are capped at **$250/night** in Tier 1 cities.\n"
+        "- Expense reports must be submitted within **5 business days** of return."
+    )
+
+
+# ── Agentic Router — mimics LangChain astream_events (v2) ───────────────────
 
 async def stream_chat_query(
     query: str,
     history: list,
-    sap_token: str,           # Per-request SAP access token (from OAuth2 SAML exchange)
+    sap_token: str,
     employee_id: str = "UNKNOWN"
 ) -> AsyncGenerator[str, None]:
     """
-    Agentic router with two dynamically-instantiated tools:
-      1. query_sap_odata  — grounded against sap_schema_catalog.json,
-                            authorized with the per-user SAP token.
-      2. query_company_docs — Vector DB similarity search (mock ChromaDB).
-
-    The agent NEVER holds a master SAP credential. Every OData call is made
-    with a short-lived, user-scoped SAP access token obtained via OAuth2SAMLBearer.
-    SAP enforces its own row-level security via the named user mapping (SU01).
+    Routes queries to the correct tool and streams SSE chunks.
+    Mimics LangChain astream_events v2 event structure:
+      on_tool_start  → yields thinking text
+      on_tool_end    → yields result (text chunk or tabular payload)
+      on_llm_stream  → yields token-by-token text
     """
     query_lower = query.lower()
 
-    # ── Tool 1: query_company_docs (Vector RAG) ──────────────────────────────
-    if "policy" in query_lower or "travel" in query_lower or "document" in query_lower or "procedure" in query_lower:
-        thinking = f"[Agent: query_company_docs] Searching ChromaDB vector store as user {employee_id}... "
-        for word in thinking.split():
-            yield f"data: {json.dumps({'type': 'chunk', 'text': word + ' '})}\n\n"
-            await asyncio.sleep(0.04)
-
-        result = (
-            "\n\n**Company Policy (ChromaDB similarity score: 0.94)**\n\n"
-            "**Travel Policy (v2.3)**\n"
-            "- All flights must be booked **14 days in advance**.\n"
-            "- Business Class requires manager approval above $3,000 net fare.\n"
-            "- Hotel stays are capped at **$250/night** in Tier 1 cities.\n"
-            "- Expense reports must be submitted within **5 business days** of return."
-        )
-        for word in result.split(" "):
+    async def emit(text: str, delay: float = 0.04):
+        """Yield text word by word, simulating on_llm_stream token events."""
+        for word in text.split(" "):
             yield f"data: {json.dumps({'type': 'chunk', 'text': ' ' + word})}\n\n"
-            await asyncio.sleep(0.04)
+            await asyncio.sleep(delay)
 
-    # ── Tool 2: query_sap_odata (Schema-Grounded, Per-User Token) ────────────
-    elif any(kw in query_lower for kw in ["data", "sales", "order", "employee", "procurement", "purchase", "vendor", "sap", "table", "show"]):
-        entity, columns, mock_data = _resolve_entity_and_columns(query_lower)
-        odata_query = _build_odata_query(entity, columns, query_lower, sap_token)
+    # ── on_tool_start: query_company_docs ─────────────────────────────────────
+    if any(kw in query_lower for kw in ["policy", "travel", "document", "procedure", "sop"]):
+        async for chunk in emit(f"[on_tool_start] Invoking **query_company_docs** for `{employee_id}`..."):
+            yield chunk
 
-        # Step 1: Report entity resolution and token context
-        step1 = (
-            f"[Agent: query_sap_odata] Tool instantiated for user **{employee_id}**. "
-            f"Entity resolved: **{entity}**. "
-            f"SAP token scope: user-delegated (OAuth2 SAML Bearer). "
-        )
-        for word in step1.split():
-            yield f"data: {json.dumps({'type': 'chunk', 'text': word + ' '})}\n\n"
-            await asyncio.sleep(0.04)
+        doc_result = await query_company_docs(query)
 
-        # Step 2: Show the grounded OData query being constructed
-        step2 = f"\n\nConstructing OData query (catalog-grounded, strictly no hallucinated columns):\n```\n{odata_query}\n```\n"
-        for word in step2.split(" "):
-            yield f"data: {json.dumps({'type': 'chunk', 'text': ' ' + word})}\n\n"
-            await asyncio.sleep(0.03)
+        async for chunk in emit(f"\n\n[on_tool_end] ChromaDB returned 1 match.\n\n{doc_result}"):
+            yield chunk
 
-        # Step 3: Simulate 400 self-correction
-        if "bad" in query_lower or "error" in query_lower or "hallucinate" in query_lower:
-            error_msg = (
-                "\n\n⚠ **SAP returned HTTP 400 Bad Request** — invented column `OrderTotal` not in catalog. "
-                "Re-grounding against `sap_schema_catalog.json`... Retry with `NetAmount`... ✓ **Success.**\n"
-            )
-            for word in error_msg.split(" "):
-                yield f"data: {json.dumps({'type': 'chunk', 'text': ' ' + word})}\n\n"
-                await asyncio.sleep(0.04)
+    # ── on_tool_start: query_sap_odata ────────────────────────────────────────
+    elif any(kw in query_lower for kw in ["data", "sales", "order", "employee", "procurement",
+                                           "purchase", "vendor", "sap", "table", "show", "hr"]):
+        entity = _resolve_entity(query_lower)
+        url = _build_odata_query(entity, query_lower)
 
-        # Step 4: SAP enforces row-level security — only return records the user can see
-        step3 = (
-            f"\n\nSAP authorization check passed (SU01 named-user mapping active). "
-            f"Returning {len(mock_data)} records visible to **{employee_id}**:\n"
-        )
-        for word in step3.split(" "):
-            yield f"data: {json.dumps({'type': 'chunk', 'text': ' ' + word})}\n\n"
-            await asyncio.sleep(0.03)
+        async for chunk in emit(
+            f"[on_tool_start] Invoking **query_sap_odata** · Entity: **{entity}** · User: **{employee_id}**\n\n"
+            f"OData query (catalog-grounded):\n```\nGET {url}\nAuthorization: Bearer {sap_token[:24]}...\n```\n"
+        ):
+            yield chunk
 
-        # Emit structured tabular payload — frontend DataCard renders this instantly
-        yield f"data: {json.dumps({'type': 'tabular', 'data': mock_data, 'entity': entity})}\n\n"
+        result = await query_sap_odata(query, sap_token, employee_id)
 
-    # ── Fallback: conversational ──────────────────────────────────────────────
+        if not result["ok"]:
+            status = result.get("status", 500)
+            error_msg = result.get("error", "Unknown SAP error.")
+            async for chunk in emit(f"\n\n[on_tool_end] ⚠ SAP returned HTTP **{status}**: {error_msg}"):
+                yield chunk
+            return
+
+        if result.get("self_corrected"):
+            async for chunk in emit("\n\n[on_tool_end] ⚠ Self-corrected after 400 Bad Request. Retried with catalog-only fields. ✓"):
+                yield chunk
+
+        async for chunk in emit(f"\n\n[on_tool_end] SAP returned **{len(result['data'])}** records visible to **{employee_id}** (SU01 auth enforced):"):
+            yield chunk
+
+        # Emit structured tabular payload — DataCard renders this instantly
+        yield f"data: {json.dumps({'type': 'tabular', 'data': result['data'], 'entity': result['entity']})}\n\n"
+
+    # ── on_llm_stream: fallback conversational ────────────────────────────────
     else:
-        history_note = f"(Session has {len(history)} prior messages.) " if history else ""
+        history_note = f"(Session context: {len(history)} messages.) " if history else ""
         tools_list = ", ".join(CATALOG.keys()) if CATALOG else "SalesOrderSet, EmployeeSet, ProcurementSet"
         msg = (
-            f"Hello **{employee_id}**! {history_note}I am CIRA, your SAP Intelligence Agent.\n\n"
-            f"Your session is authenticated with a user-delegated SAP token. "
-            f"SAP enforces your authorization profile (SU01 roles) on every query.\n\n"
+            f"Hello **{employee_id}**! {history_note}I am **CIRA**, your SAP Intelligence Agent.\n\n"
+            f"Your session token has been exchanged for a user-scoped SAP access token "
+            f"via OAuth2 SAML Bearer. SAP enforces your authorization profile on every query.\n\n"
             f"**Available tools:**\n"
-            f"- `query_sap_odata` — grounded against: {tools_list}\n"
-            f"- `query_company_docs` — ChromaDB vector search for policies & SOPs\n\n"
+            f"- `query_sap_odata` — {tools_list}\n"
+            f"- `query_company_docs` — ChromaDB vector search (policies & SOPs)\n\n"
             f"Try: *'Show me sales orders'*, *'Employee data'*, *'Travel policy'*, or *'Trigger bad request'*."
         )
-        for word in msg.split(" "):
-            yield f"data: {json.dumps({'type': 'chunk', 'text': ' ' + word})}\n\n"
-            await asyncio.sleep(0.04)
+        async for chunk in emit(msg):
+            yield chunk
