@@ -160,6 +160,74 @@ async def get_history(
         } for m in history
     ]}
 
+@app.get("/sessions")
+async def get_sessions(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    user_context = validate_and_extract(credentials)
+    employee_id = user_context.get("employee_id", "UNKNOWN")
+
+    stmt = select(ChatSession).where(ChatSession.employee_id == employee_id).order_by(ChatSession.id.desc())
+    result = await db.execute(stmt)
+    sessions = result.scalars().all()
+    
+    return {"sessions": [
+        {"id": str(s.session_id), "title": s.title}
+        for s in sessions
+    ]}
+
+class RenameRequest(BaseModel):
+    title: str
+
+@app.put("/session/{session_id}")
+async def rename_session(
+    session_id: str,
+    request: RenameRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    user_context = validate_and_extract(credentials)
+    employee_id = user_context.get("employee_id", "UNKNOWN")
+
+    stmt = select(ChatSession).where(ChatSession.session_id == session_id, ChatSession.employee_id == employee_id)
+    result = await db.execute(stmt)
+    session_obj = result.scalars().first()
+    
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    session_obj.title = request.title
+    await db.commit()
+    return {"ok": True}
+
+from sqlalchemy import delete
+
+@app.delete("/session/{session_id}")
+async def delete_session(
+    session_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    user_context = validate_and_extract(credentials)
+    employee_id = user_context.get("employee_id", "UNKNOWN")
+
+    stmt = select(ChatSession).where(ChatSession.session_id == session_id, ChatSession.employee_id == employee_id)
+    result = await db.execute(stmt)
+    session_obj = result.scalars().first()
+    
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    await db.delete(session_obj)
+    
+    # Also delete associated messages
+    del_stmt = delete(ChatMessage).where(ChatMessage.session_id == session_id, ChatMessage.employee_id == employee_id)
+    await db.execute(del_stmt)
+    
+    await db.commit()
+    return {"ok": True}
+
 
 if __name__ == "__main__":
     import uvicorn

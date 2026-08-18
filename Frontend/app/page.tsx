@@ -19,18 +19,8 @@ const fallbackDataPayload = {
 type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string }
 type Session = { id: number; title: string; date: string }
 
-const initialMessages: Message[] = [
-  { role: 'user', content: 'Show me the Q3 procurement variance by plant.' }, 
-  { role: 'assistant', content: 'I found the procurement variance for Q3 across 18 plants. The largest positive variance is in DE-1000, driven primarily by raw materials and expedited freight.', data: fallbackDataPayload }
-]
-const initialSessions: Session[] = [
-  { id: 1, title: 'Q3 procurement variance', date: 'Today' }, 
-  { id: 2, title: 'Open purchase orders by vendor', date: 'Today' }, 
-  { id: 3, title: 'Inventory aging analysis', date: 'Today' }, 
-  { id: 4, title: 'Cost center allocations', date: 'Previous 7 days' }, 
-  { id: 5, title: 'Materials forecast 2025', date: 'Previous 7 days' }, 
-  { id: 6, title: 'Supplier performance review', date: 'Previous 7 days' }
-]
+const initialMessages: Message[] = []
+const initialSessions: Session[] = []
 
 function BrandMark() { return <div className="brand-mark"><span /><span /><span /></div> }
 
@@ -169,7 +159,7 @@ function DataCard({ payload, entity }: { payload?: any; entity?: string }) {
   )
 }
 
-function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, setSessions, theme, onTheme }: { collapsed: boolean; onToggle: () => void; onLogout: () => void; active: string; onSelect: (title: string) => void; sessions: Session[]; setSessions: (sessions: Session[]) => void; theme: 'light' | 'dark'; onTheme: () => void }) { 
+function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, setSessions, theme, onTheme, sessionToken, employeeId }: { collapsed: boolean; onToggle: () => void; onLogout: () => void; active: string; onSelect: (title: string) => void; sessions: Session[]; setSessions: (sessions: Session[]) => void; theme: 'light' | 'dark'; onTheme: () => void; sessionToken: string; employeeId: string; }) { 
   const [query, setQuery] = useState(''); 
   const [menu, setMenu] = useState<number | null>(null); 
   const [editing, setEditing] = useState<number | null>(null); 
@@ -177,8 +167,31 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
   const filtered = useMemo(() => sessions.filter((s) => s.title.toLowerCase().includes(query.toLowerCase())), [query, sessions]); 
   
   const rename = (session: Session) => { setEditing(session.id); setEditValue(session.title); setMenu(null) }; 
-  const saveRename = (id: number) => { const title = editValue.trim(); if (title) setSessions(sessions.map((s) => s.id === id ? { ...s, title } : s)); setEditing(null) }; 
-  const remove = (session: Session) => { setSessions(sessions.filter((s) => s.id !== session.id)); setMenu(null); if (active === session.title) onSelect('New conversation') }; 
+  const saveRename = async (id: number, oldTitle: string) => { 
+    const title = editValue.trim(); 
+    if (title && title !== oldTitle) {
+      setSessions(sessions.map((s) => s.id === id ? { ...s, title } : s));
+      try {
+        await fetch(`http://localhost:8000/session/${employeeId}__${oldTitle}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+          body: JSON.stringify({ title: `${employeeId}__${title}` })
+        });
+      } catch (err) { console.error('Rename failed', err) }
+    }
+    setEditing(null);
+  }; 
+  const remove = async (session: Session) => { 
+    setSessions(sessions.filter((s) => s.id !== session.id)); 
+    setMenu(null); 
+    if (active === session.title) onSelect('New conversation');
+    try {
+      await fetch(`http://localhost:8000/session/${employeeId}__${session.title}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
+      });
+    } catch (err) { console.error('Delete failed', err) }
+  };
   
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -195,9 +208,9 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
               <Plus size={16} /> 
               <span>New chat</span>
             </button>
-            <button className="theme-toggle" onClick={onTheme} aria-label="Toggle theme">
+            {/* <button className="theme-toggle" onClick={onTheme} aria-label="Toggle theme">
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+            </button> */}
           </div>
           <div className="history-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
           <div className="history">
@@ -209,7 +222,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
                     <MessageSquare size={15} />
                     <div className="history-title">
                       {editing === session.id ? (
-                        <input autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onBlur={() => saveRename(session.id)} onKeyDown={(event) => { if (event.key === 'Enter') saveRename(session.id); if (event.key === 'Escape') setEditing(null) }} />
+                        <input autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onBlur={() => saveRename(session.id, session.title)} onKeyDown={(event) => { if (event.key === 'Enter') saveRename(session.id, session.title); if (event.key === 'Escape') setEditing(null) }} />
                       ) : (
                         <span>{session.title}</span>
                       )}
@@ -242,20 +255,34 @@ export default function Page() {
   const [employeeId, setEmployeeId] = useState('EMP-20481');
   const [sessionToken, setSessionToken] = useState('');  // Bearer token passed on every API call
   const [collapsed, setCollapsed] = useState(false); 
-  const [active, setActive] = useState('Q3 procurement variance'); 
+  const [active, setActive] = useState('New conversation'); 
   const [messages, setMessages] = useState<Message[]>(initialMessages); 
   const [input, setInput] = useState(''); 
   const [sessions, setSessions] = useState(initialSessions); 
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark'); 
+  const [theme, setTheme] = useState<'light' | 'dark'>('light'); 
   const [isThinking, setIsThinking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null); 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);  // Fix 6.2: cancel in-flight streams on session switch
 
   useEffect(() => { 
-    const saved = window.localStorage.getItem('cira-theme') as 'light' | 'dark' | null; 
-    if (saved) setTheme(saved) 
-  }, []); 
+    if (loggedIn && sessionToken) {
+      fetch('http://localhost:8000/sessions', {
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.sessions) {
+            setSessions(data.sessions.map((s: any, idx: number) => ({
+              id: idx,
+              title: s.title.replace(`${employeeId}__`, ''), // Strip prefix
+              date: 'Today' // Mocking date for simplicity
+            })));
+          }
+        })
+        .catch(console.error);
+    }
+  }, [loggedIn, sessionToken]);
 
   useEffect(() => { 
     document.documentElement.classList.toggle('dark', theme === 'dark'); 
@@ -357,10 +384,6 @@ export default function Page() {
       setMessages([]);
       return;
     }
-    if (title === 'Q3 procurement variance') {
-      setMessages(initialMessages);
-      return;
-    }
     const sessionId = `${employeeId}__${title}`;
     try {
       const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(sessionId)}`, {
@@ -381,7 +404,7 @@ export default function Page() {
   
   return (
     <main className="app-shell">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={() => setLoggedIn(false)} active={active} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={() => setLoggedIn(false)} active={active} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} sessionToken={sessionToken} employeeId={employeeId} />
       <section className="chat-shell">
         <header className="chat-header">
           <div className="mobile-title">

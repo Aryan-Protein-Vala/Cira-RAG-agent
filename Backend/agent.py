@@ -24,7 +24,7 @@ SAP_ODATA_BASE_URL = "[SAP_ODATA_BASE_URL]"
 
 # OpenRouter Settings for testing
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "sk-or-dummy")
-MODEL_NAME = "meta-llama/llama-3-8b-instruct:free"
+MODEL_NAME = "openrouter/free"
 
 llm = ChatOpenAI(
     api_key=OPENROUTER_API_KEY,
