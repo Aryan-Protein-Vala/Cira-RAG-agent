@@ -249,7 +249,8 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
 
 export default function Page() { 
   const [loggedIn, setLoggedIn] = useState(false); 
-  const [employeeId, setEmployeeId] = useState('EMP-20481');
+  const [isAuthLoaded, setIsAuthLoaded] = useState(false);
+  const [employeeId, setEmployeeId] = useState('');
   const [sessionToken, setSessionToken] = useState('');  // Bearer token passed on every API call
   const [collapsed, setCollapsed] = useState(false); 
   const [active, setActive] = useState('New conversation'); 
@@ -262,6 +263,17 @@ export default function Page() {
   const fileRef = useRef<HTMLInputElement>(null); 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);  // Fix 6.2: cancel in-flight streams on session switch
+
+  useEffect(() => {
+    const savedToken = localStorage.getItem('cira-token');
+    const savedId = localStorage.getItem('cira-emp-id');
+    if (savedToken && savedId) {
+      setSessionToken(savedToken);
+      setEmployeeId(savedId);
+      setLoggedIn(true);
+    }
+    setIsAuthLoaded(true);
+  }, []);
 
   useEffect(() => { 
     if (loggedIn && sessionToken) {
@@ -436,11 +448,30 @@ export default function Page() {
     }
   }; 
   
-  if (!loggedIn) return <Login onLogin={(id, token) => { setEmployeeId(id); setSessionToken(token); setLoggedIn(true); }} theme={theme} onToggle={toggleTheme} />; 
+  const handleLogin = (id: string, token: string) => {
+    localStorage.setItem('cira-emp-id', id);
+    localStorage.setItem('cira-token', token);
+    setEmployeeId(id);
+    setSessionToken(token);
+    setLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('cira-emp-id');
+    localStorage.removeItem('cira-token');
+    setLoggedIn(false);
+    setSessionToken('');
+    setSessions([]);
+    setMessages([]);
+    setActive('New conversation');
+  };
+
+  if (!isAuthLoaded) return null;
+  if (!loggedIn) return <Login onLogin={handleLogin} theme={theme} onToggle={toggleTheme} />; 
   
   return (
     <main className="app-shell">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={() => setLoggedIn(false)} active={active} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} sessionToken={sessionToken} employeeId={employeeId} />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={handleLogout} active={active} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} sessionToken={sessionToken} employeeId={employeeId} />
       <section className="chat-shell">
         <header className="chat-header">
           <div className="mobile-title">
