@@ -162,7 +162,7 @@ function Sidebar({ collapsed, onToggle, onLogout, active, onSelect, sessions, se
               <span>New chat</span>
             </button>
             <button className="theme-toggle" onClick={onTheme} aria-label="Toggle theme">
-              <Search size={16} />
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
           </div>
           <div className="history-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
@@ -289,7 +289,6 @@ export default function Page() {
             <div><span className="eyebrow">RAG WORKSPACE</span><h2>{active}</h2></div>
           </div>
           <div className="header-actions">
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <button className="secondary-button" onClick={() => selectChat('New conversation')}><Plus size={16} /> New chat</button>
           </div>
         </header>
