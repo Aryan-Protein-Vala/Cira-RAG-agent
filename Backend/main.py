@@ -89,6 +89,7 @@ app.add_middleware(CORSMiddleware, **cors_kwargs)
 class LoginRequest(BaseModel):
     employee_id: str = Field(..., min_length=1, max_length=64)
     password: str = Field(..., min_length=1, max_length=256)
+    company_db: str = Field(default="")
 
 
 class ChatRequest(BaseModel):
@@ -109,13 +110,13 @@ class TitleRequest(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/auth/login")
 async def login(request: LoginRequest):
-    user = authenticate(request.employee_id, request.password)
+    user = authenticate(request.employee_id, request.password, request.company_db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid employee ID or password.",
+            detail="Invalid employee ID, password, or company DB.",
         )
-    minted = create_token(user["employee_id"], user["name"], user["roles"])
+    minted = create_token(user["employee_id"], user["name"], user["roles"], company_db=user["company_db"])
     return {
         "token": minted["token"],
         "expires_at": minted["expires_at"],
@@ -152,8 +153,7 @@ async def health():
 
 
 @app.get("/sap/health")
-async def sap_health(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
-    validate_and_extract(credentials)
+async def sap_health():
     return await sap.health()
 
 

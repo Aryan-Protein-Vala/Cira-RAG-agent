@@ -116,10 +116,11 @@ class ServiceLayerBackend(DataBackend):
     simulated = False
 
     def __init__(self):
-        self.base = config.SERVICE_LAYER_BASE
-        self.company = config.SAP_B1_COMPANY_DB
-        self.user = config.SAP_B1_USER
-        self.password = config.SAP_B1_PASSWORD
+        tenant = config.CURRENT_TENANT.get() or {}
+        self.base = tenant.get("SERVICE_LAYER_BASE", config.SERVICE_LAYER_BASE)
+        self.company = tenant.get("SAP_B1_COMPANY_DB", config.SAP_B1_COMPANY_DB)
+        self.user = tenant.get("SAP_B1_USER", config.SAP_B1_USER)
+        self.password = tenant.get("SAP_B1_PASSWORD", config.SAP_B1_PASSWORD)
         self.schema = self.company
         self._cookies: dict[str, str] | None = None
         self._expires_at: float = 0.0

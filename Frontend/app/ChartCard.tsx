@@ -98,8 +98,8 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
     const name = tooltipPayload[0].payload?.[xKey] ?? label
     return (
       <div className="chart-tooltip">
-        <p className="chart-tooltip-label">{String(name)}</p>
-        <p className="chart-tooltip-value">
+        <p className="chart-tooltip-label" style={{ color: 'var(--foreground)' }}>{String(name)}</p>
+        <p className="chart-tooltip-value" style={{ color: 'var(--muted-foreground)' }}>
           {humanise(yKey)}: {typeof value === 'number' && !Number.isNaN(value) ? value.toLocaleString() : String(value ?? '')}
         </p>
       </div>
@@ -107,7 +107,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
   }
 
   const axisProps = {
-    stroke: axisColor,
+    stroke: 'var(--muted-foreground)',
     fontSize: 11,
     tickLine: false,
   } as const
@@ -119,7 +119,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           <span className="data-label">
             <TrendingUp size={13} /> {payload.category || 'ANALYTICS VISUALIZATION'}
           </span>
-          <strong>{payload.title || `${humanise(yKey)} by ${humanise(xKey)}`}</strong>
+          <strong style={{ color: 'var(--foreground)' }}>{payload.title || `${humanise(yKey)} by ${humanise(xKey)}`}</strong>
           {payload.aggregated && payload.sourceRows ? (
             <span className="chart-subtitle">
               {payload.points} groups aggregated from {payload.sourceRows.toLocaleString()} rows
@@ -155,7 +155,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
               <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" angle={data.length > 8 ? -20 : 0} textAnchor={data.length > 8 ? 'end' : 'middle'} height={data.length > 8 ? 60 : 30} />
               <YAxis {...axisProps} tickFormatter={compact} width={64} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(125, 165, 255, 0.08)' }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--secondary)' }} />
               <Bar dataKey={yKey} fill="url(#ciraBarGradient)" radius={[8, 8, 0, 0]} maxBarSize={64} />
             </BarChart>
           ) : activeType === 'line' ? (
@@ -205,7 +205,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
                 ))}
               </Pie>
               <Legend
-                formatter={(value) => <span className="chart-legend-label">{String(value)}</span>}
+                formatter={(value) => <span className="chart-legend-label" style={{ color: 'var(--foreground)' }}>{String(value)}</span>}
                 wrapperStyle={{ fontSize: 11, maxHeight: 72, overflowY: 'auto' }}
               />
             </PieChart>

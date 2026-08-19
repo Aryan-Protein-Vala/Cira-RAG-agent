@@ -35,19 +35,20 @@ class HanaBackend(DataBackend):
 
     def __init__(
         self,
-        host: str = config.HANA_HOST,
-        port: int = config.HANA_PORT,
-        user: str = config.HANA_USER,
-        password: str = config.HANA_PASSWORD,
-        schema: str = config.HANA_SCHEMA,
-        pool_size: int = config.HANA_POOL_SIZE,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        schema: str | None = None,
+        pool_size: int | None = None,
     ):
-        self.host = host
-        self.port = port
-        self.user = user
-        self.password = password
-        self.schema = (schema or "").strip()
-        self.pool_size = max(1, pool_size)
+        tenant = config.CURRENT_TENANT.get() or {}
+        self.host = host or tenant.get("HANA_HOST", config.HANA_HOST)
+        self.port = port or tenant.get("HANA_PORT", config.HANA_PORT)
+        self.user = user or tenant.get("HANA_USER", config.HANA_USER)
+        self.password = password or tenant.get("HANA_PASSWORD", config.HANA_PASSWORD)
+        self.schema = (schema or tenant.get("HANA_SCHEMA", config.HANA_SCHEMA) or "").strip()
+        self.pool_size = max(1, pool_size or tenant.get("HANA_POOL_SIZE", config.HANA_POOL_SIZE))
         self._pool: queue.LifoQueue = queue.LifoQueue()
         self._created = 0
         self._lock = threading.Lock()

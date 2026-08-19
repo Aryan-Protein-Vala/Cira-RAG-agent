@@ -116,6 +116,7 @@ function Login({
 }) {
   const [employee, setEmployee] = useState('')
   const [password, setPassword] = useState('')
+  const [companyDb, setCompanyDb] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -133,7 +134,7 @@ function Login({
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id: id, password }),
+        body: JSON.stringify({ employee_id: id, password, company_db: companyDb }),
       })
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}))
@@ -187,6 +188,14 @@ function Login({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 autoComplete="current-password"
+              />
+            </label>
+            <label>
+              Company DB (Optional)
+              <input 
+                value={companyDb} 
+                onChange={(e) => setCompanyDb(e.target.value)} 
+                placeholder="e.g. CLIENT_B_PROD" 
               />
             </label>
             {error && <p className="login-error">{error}</p>}

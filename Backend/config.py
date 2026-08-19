@@ -10,6 +10,7 @@ os.getenv() directly -- that was one of the reasons the old code drifted
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -90,6 +91,31 @@ SAP_B1_TIMEOUT_S = _float("SAP_B1_TIMEOUT_S", 20.0)
 SERVICE_LAYER_BASE = _str(
     "SAP_B1_SERVICE_LAYER_URL", f"https://{SAP_B1_HOST}:{SAP_B1_PORT}/b1s/v1"
 ).rstrip("/")
+
+# ── Multi-Tenancy Context ────────────────────────────────────────────────────
+# In a real production app, this would be a Postgres DB table lookup.
+# For now, we mock multiple company tenants here.
+MOCK_TENANTS = {
+    "CIRA_DEMO_NEW": {
+        "HANA_SCHEMA": "CIRA_DEMO_NEW",
+        "SAP_B1_COMPANY_DB": "CIRA_DEMO_NEW",
+        "HANA_USER": HANA_USER,
+        "HANA_PASSWORD": HANA_PASSWORD,
+        "SAP_B1_USER": SAP_B1_USER,
+        "SAP_B1_PASSWORD": SAP_B1_PASSWORD,
+    },
+    "CLIENT_B_PROD": {
+        "HANA_SCHEMA": "CLIENT_B_PROD",
+        "SAP_B1_COMPANY_DB": "CLIENT_B_PROD",
+        "HANA_USER": HANA_USER, # Using same user/pass for demo
+        "HANA_PASSWORD": HANA_PASSWORD,
+        "SAP_B1_USER": SAP_B1_USER,
+        "SAP_B1_PASSWORD": SAP_B1_PASSWORD,
+    }
+}
+
+# The active tenant configuration for the current HTTP request / asyncio task
+CURRENT_TENANT = ContextVar("CURRENT_TENANT", default=None)
 
 # ── Row limits ───────────────────────────────────────────────────────────────
 DEFAULT_ROW_LIMIT = _int("CIRA_DEFAULT_ROW_LIMIT", 500)

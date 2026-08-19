@@ -73,7 +73,7 @@ def _sign(payload_b64: str) -> str:
 
 
 def create_token(employee_id: str, name: str = "", roles: list[str] | None = None,
-                 ttl: int | None = None) -> dict:
+                 ttl: int | None = None, company_db: str | None = None) -> dict:
     now = int(time.time())
     exp = now + int(ttl or config.TOKEN_TTL_SECONDS)
     payload = {
@@ -81,6 +81,7 @@ def create_token(employee_id: str, name: str = "", roles: list[str] | None = Non
         "employee_id": employee_id,
         "name": name or employee_id,
         "roles": roles or ["employee"],
+        "company_db": company_db or config.SAP_B1_COMPANY_DB,
         "iat": now,
         "exp": exp,
     }
@@ -123,18 +124,22 @@ def verify_token(token: str) -> dict:
 
 
 def validate_and_extract(credentials: HTTPAuthorizationCredentials) -> dict:
-    """FastAPI dependency helper — returns the verified user context."""
+    """FastAPI dependency helper — returns the verified user context and sets tenant."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token.")
-    return verify_token(credentials.credentials)
+    
+    payload = verify_token(credentials.credentials)
+    
+    company_db = payload.get("company_db", config.SAP_B1_COMPANY_DB)
+    tenant_config = config.MOCK_TENANTS.get(company_db)
+    if tenant_config:
+        config.CURRENT_TENANT.set(tenant_config)
+        
+    return payload
 
 
-def authenticate(employee_id: str, password: str) -> dict | None:
-    """Validate sign-in credentials.
-
-    Replace this body with an LDAP/Azure AD/SAP OUSR check for production; the
-    demo rules below are configurable through the environment.
-    """
+def authenticate(employee_id: str, password: str, company_db: str = "") -> dict | None:
+    """Validate sign-in credentials."""
     employee_id = (employee_id or "").strip()
     if not employee_id or not password:
         return None
@@ -142,11 +147,11 @@ def authenticate(employee_id: str, password: str) -> dict | None:
     if employee_id.lower() == config.ADMIN_ID.lower():
         if hmac.compare_digest(password, config.ADMIN_PASSWORD):
             return {"employee_id": "ADMIN-001", "name": "System Admin",
-                    "roles": ["admin", "employee"]}
+                    "roles": ["admin", "employee"], "company_db": company_db or config.SAP_B1_COMPANY_DB}
         return None
 
     if config.ALLOW_ANY_EMPLOYEE:
-        return {"employee_id": employee_id, "name": employee_id, "roles": ["employee"]}
+        return {"employee_id": employee_id, "name": employee_id, "roles": ["employee"], "company_db": company_db or config.SAP_B1_COMPANY_DB}
     return None
 
 

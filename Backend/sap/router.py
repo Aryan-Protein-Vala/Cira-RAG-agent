@@ -37,12 +37,16 @@ RETRY_SECONDS = int(os.getenv("CIRA_BACKEND_RETRY_S", "120"))
 
 class _Selector:
     def __init__(self) -> None:
-        self._active: DataBackend | None = None
-        self._active_at: float = 0.0
+        self._active_by_tenant: dict[str, DataBackend] = {}
+        self._active_at_by_tenant: dict[str, float] = {}
         self._last_error: str = ""
         self._probe_log: list[dict] = []
         self._refreshing = False
         self._lock = threading.Lock()
+
+    def _get_tenant_id(self) -> str:
+        tenant = config.CURRENT_TENANT.get() or {}
+        return tenant.get("HANA_SCHEMA", "default")
 
     # ── construction helpers ────────────────────────────────────────────────
     @staticmethod
@@ -58,47 +62,51 @@ class _Selector:
         if mode in ("hana", "service", "service_layer", "odata", "simulator", "sim", "mock"):
             return [{"sim": "simulator", "mock": "simulator"}.get(mode, mode)]
         order = []
-        if config.HANA_PASSWORD:
+        tenant = config.CURRENT_TENANT.get() or {}
+        if tenant.get("HANA_PASSWORD", config.HANA_PASSWORD):
             order.append("hana")
-        if config.SAP_B1_PASSWORD:
+        if tenant.get("SAP_B1_PASSWORD", config.SAP_B1_PASSWORD):
             order.append("service")
         order.append("simulator")
         return order
 
     # ── selection ────────────────────────────────────────────────────────────
     def get(self, force: bool = False) -> DataBackend:
-        """Return the active backend.
-
-        Re-probing the primary backend can take seconds (TCP timeouts against a
-        firewalled HANA host), so once we are degraded to the sandbox the retry
-        happens on a background thread: user requests are never blocked by it.
-        """
         now = time.time()
-        if self._active is not None and not force:
-            if self._active.simulated and now - self._active_at >= RETRY_SECONDS:
-                self._schedule_refresh()
-            return self._active
-        return self._select(force)
+        tenant_id = self._get_tenant_id()
+        active = self._active_by_tenant.get(tenant_id)
+        active_at = self._active_at_by_tenant.get(tenant_id, 0.0)
 
-    def _schedule_refresh(self) -> None:
+        if active is not None and not force:
+            if active.simulated and now - active_at >= RETRY_SECONDS:
+                self._schedule_refresh(tenant_id)
+            return active
+        return self._select(tenant_id, force)
+
+    def _schedule_refresh(self, tenant_id: str) -> None:
         with self._lock:
             if self._refreshing:
                 return
             self._refreshing = True
-            self._active_at = time.time()  # don't queue another probe immediately
+            self._active_at_by_tenant[tenant_id] = time.time()
 
+        # Save the current context so the background thread connects to the right DB
+        current_ctx = config.CURRENT_TENANT.get()
+        
         def worker():
             try:
-                self._select(force=True)
+                # Restore context in thread
+                config.CURRENT_TENANT.set(current_ctx)
+                self._select(tenant_id, force=True)
             except Exception as exc:  # pragma: no cover
                 log.debug("background backend refresh failed: %s", exc)
             finally:
                 with self._lock:
                     self._refreshing = False
 
-        threading.Thread(target=worker, name="cira-sap-refresh", daemon=True).start()
+        threading.Thread(target=worker, name=f"cira-sap-refresh-{tenant_id}", daemon=True).start()
 
-    def _select(self, force: bool = False) -> DataBackend:
+    def _select(self, tenant_id: str, force: bool = False) -> DataBackend:
         now = time.time()
         probes: list[dict] = []
         chosen: DataBackend | None = None
@@ -115,22 +123,23 @@ class _Selector:
                 chosen = backend
                 break
             self._last_error = probe.get("error", "")
-            log.warning("SAP backend %s unavailable: %s", kind, probe.get("error"))
+            log.warning("SAP backend %s unavailable for %s: %s", kind, tenant_id, probe.get("error"))
 
         if chosen is None:
             chosen = SimulatorBackend()
             chosen.ping()
 
-        if self._active is not None and self._active is not chosen:
+        existing = self._active_by_tenant.get(tenant_id)
+        if existing is not None and existing is not chosen:
             try:
-                self._active.close()
+                existing.close()
             except Exception:
                 pass
 
-        self._active = chosen
-        self._active_at = now
+        self._active_by_tenant[tenant_id] = chosen
+        self._active_at_by_tenant[tenant_id] = now
         self._probe_log = probes
-        log.info("Active SAP backend: %s (schema=%s)", chosen.name, chosen.schema)
+        log.info("Active SAP backend for %s: %s (schema=%s)", tenant_id, chosen.name, chosen.schema)
         return chosen
 
     @property
