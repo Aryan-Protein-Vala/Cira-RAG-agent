@@ -1,8 +1,18 @@
+# Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+
+# Local state — never commit runtime data
 *.db
 *.db-wal
 *.db-shm
+data/
+!data/.gitkeep
+
+# Secrets
 .env
+.session_secret

@@ -249,3 +249,186 @@ button.avatar:hover { transform: scale(1.1); background: rgba(255, 255, 255, 0.2
 /* Fix Render-5: mobile sidebar backdrop overlay */
 .mobile-sidebar-backdrop { display: none; }
 @media (max-width: 720px) { .mobile-sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 19; backdrop-filter: blur(2px); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CIRA v2 — data card, charts, status, theming fixes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-strong: rgba(255, 255, 255, 0.9);
+  --surface-line: rgba(15, 23, 42, 0.12);
+  --text-strong: #0f172a;
+  --text-soft: rgba(15, 23, 42, 0.62);
+  --chart-axis: rgba(15, 23, 42, 0.55);
+  --chart-grid: rgba(15, 23, 42, 0.08);
+  --film: rgba(255, 255, 255, 0.35);
+}
+
+.dark {
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-strong: rgba(255, 255, 255, 0.1);
+  --surface-line: rgba(255, 255, 255, 0.12);
+  --text-strong: #ffffff;
+  --text-soft: rgba(255, 255, 255, 0.62);
+  --chart-axis: rgba(255, 255, 255, 0.45);
+  --chart-grid: rgba(255, 255, 255, 0.07);
+  --film: rgba(6, 10, 20, 0.35);
+}
+
+.chat-blur-film {
+  position: fixed; inset: 0; z-index: -1;
+  background: var(--film);
+  backdrop-filter: blur(12px);
+}
+
+/* ── Light-mode contrast fixes (the shell was hard-coded for dark) ───────── */
+:root:not(.dark) .app-shell { background: rgba(255, 255, 255, 0.55); }
+:root:not(.dark) .sidebar { background: rgba(255, 255, 255, 0.6); border-color: var(--surface-line); }
+:root:not(.dark) .sidebar-brand-btn,
+:root:not(.dark) .history-item,
+:root:not(.dark) .history-title input,
+:root:not(.dark) .history-search input,
+:root:not(.dark) .icon-button,
+:root:not(.dark) .new-chat,
+:root:not(.dark) .secondary-button,
+:root:not(.dark) .theme-toggle,
+:root:not(.dark) .avatar,
+:root:not(.dark) .message-avatar,
+:root:not(.dark) .history-menu button,
+:root:not(.dark) .modal-content,
+:root:not(.dark) .toast { color: var(--text-strong); }
+:root:not(.dark) .group-label,
+:root:not(.dark) .eyebrow,
+:root:not(.dark) .data-label,
+:root:not(.dark) .message-author,
+:root:not(.dark) .composer-note,
+:root:not(.dark) .data-period { color: var(--text-soft); }
+:root:not(.dark) .history-menu { background: rgba(255, 255, 255, 0.95); }
+:root:not(.dark) .modal-content { background: rgba(255, 255, 255, 0.95); }
+:root:not(.dark) .modal-content p { color: var(--text-soft); }
+:root:not(.dark) .toast { background: rgba(255, 255, 255, 0.95); }
+:root:not(.dark) .login-card { background: rgba(255, 255, 255, 0.75); color: var(--text-strong); }
+:root:not(.dark) .login-card input { color: var(--text-strong); background: rgba(255, 255, 255, 0.9); }
+:root:not(.dark) .login-copy,
+:root:not(.dark) .login-card label,
+:root:not(.dark) .secure-note { color: var(--text-soft); }
+:root:not(.dark) .composer { background: rgba(255, 255, 255, 0.75); }
+:root:not(.dark) .composer textarea { color: var(--text-strong); }
+:root:not(.dark) .bubble { color: var(--text-strong); }
+
+/* ── Data card ───────────────────────────────────────────────────────────── */
+.data-card-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  background: var(--surface-strong); border: 1px solid var(--surface-line); color: var(--text-soft);
+}
+.badge-warn { color: #f59e0b; border-color: rgba(245, 158, 11, .45); background: rgba(245, 158, 11, .12); }
+
+.data-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0 10px; }
+.data-search {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;
+  padding: 6px 10px; border-radius: 10px;
+  background: var(--surface-strong); border: 1px solid var(--surface-line); color: var(--text-soft);
+}
+.data-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-size: 12px; color: var(--text-strong); }
+.data-toolbar-right { display: flex; align-items: center; gap: 8px; }
+.mini-button, .mini-select {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  background: var(--surface-strong); border: 1px solid var(--surface-line); color: var(--text-strong);
+  cursor: var(--cursor-pointer);
+}
+.mini-select { padding: 6px 8px; }
+.column-picker { position: relative; }
+.column-panel {
+  position: absolute; right: 0; top: 34px; z-index: 30; width: 230px; padding: 10px;
+  border-radius: 12px; border: 1px solid var(--surface-line);
+  background: var(--popover); backdrop-filter: blur(24px);
+  box-shadow: 0 18px 40px rgba(0,0,0,.28);
+}
+.column-panel-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.column-panel-actions button {
+  flex: 1; padding: 5px; font-size: 11px; font-weight: 600; border-radius: 8px;
+  border: 1px solid var(--surface-line); background: var(--surface); color: var(--text-strong);
+}
+.column-panel-list { max-height: 220px; overflow-y: auto; display: grid; gap: 4px; }
+.column-panel-list label {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-strong);
+  padding: 3px 4px; border-radius: 6px;
+}
+.column-panel-list label:hover { background: var(--surface-strong); }
+
+.mini-table { max-height: 420px; overflow: auto; }
+.mini-head { position: sticky; top: 0; z-index: 1; backdrop-filter: blur(12px); }
+.mini-row .sortable { display: flex; align-items: center; gap: 4px; cursor: var(--cursor-pointer); }
+.mini-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-row span.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+
+.pagination { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 11px; color: var(--text-soft); }
+.pagination button {
+  padding: 5px 10px; border-radius: 8px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--surface-line); background: var(--surface-strong); color: var(--text-strong);
+  cursor: var(--cursor-pointer);
+}
+.pagination button:disabled { opacity: .4; cursor: not-allowed; }
+
+.sql-block {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; overflow-x: auto;
+  background: rgba(0,0,0,.35); color: #a5f3fc; font-family: var(--font-mono, monospace);
+  font-size: 11px; line-height: 1.5; border: 1px solid var(--surface-line);
+}
+:root:not(.dark) .sql-block { background: rgba(15, 23, 42, .92); }
+.data-warning { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 11px; color: #f59e0b; }
+
+/* ── Chart card ──────────────────────────────────────────────────────────── */
+.chart-card {
+  width: min(720px, 100%); margin-top: 16px; padding: 20px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--surface-line);
+  backdrop-filter: blur(16px); box-shadow: 0 12px 30px rgba(0,0,0,.18);
+}
+.chart-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.chart-card-head strong { display: block; font-size: 15px; font-weight: 600; margin-top: 4px; color: var(--text-strong); }
+.chart-subtitle { display: block; margin-top: 3px; font-size: 11px; color: var(--text-soft); }
+.chart-switcher { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-strong); border: 1px solid var(--surface-line); }
+.chart-switcher button {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: none; border-radius: 8px;
+  font-size: 11px; font-weight: 600; background: transparent; color: var(--text-soft); cursor: var(--cursor-pointer);
+}
+.chart-switcher button.active { background: color-mix(in srgb, var(--primary) 22%, transparent); color: var(--primary); }
+.chart-tooltip {
+  background: rgba(20, 22, 30, .92); border: 1px solid rgba(255,255,255,.15); border-radius: 12px;
+  padding: 10px 14px; color: #fff; font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,.45);
+}
+.chart-tooltip-label { margin: 0 0 4px; font-weight: 600; color: rgba(255,255,255,.7); }
+.chart-tooltip-value { margin: 0; font-weight: 700; color: #38bdf8; }
+.chart-legend-label { color: var(--text-soft); font-size: 11px; }
+
+/* ── Chat chrome ─────────────────────────────────────────────────────────── */
+.backend-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--text-soft);
+  background: var(--surface-strong); border: 1px solid var(--surface-line);
+}
+.backend-pill.warn { color: #f59e0b; border-color: rgba(245,158,11,.4); }
+.status-line { margin: 0 0 6px; font-size: 12px; font-weight: 500; color: var(--primary); opacity: .9; }
+.error-line { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 13px; color: #f87171; }
+.login-error { margin: 0; font-size: 11px; color: var(--destructive); }
+.history-empty { padding: 10px 12px; font-size: 12px; color: var(--text-soft); }
+.suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.suggestions button {
+  padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--surface-line); background: var(--surface-strong); color: var(--text-strong);
+  cursor: var(--cursor-pointer); transition: .2s ease;
+}
+.suggestions button:hover { transform: translateY(-1px); border-color: var(--primary); color: var(--primary); }
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 auto 8px; padding: 6px 10px;
+  border-radius: 999px; font-size: 11px; font-weight: 600; width: fit-content;
+  background: var(--surface-strong); border: 1px solid var(--surface-line); color: var(--text-strong);
+}
+.attachment-chip button { border: none; background: transparent; color: var(--text-soft); font-size: 15px; line-height: 1; cursor: var(--cursor-pointer); }
+.send-button.stop { background: var(--destructive); color: #fff; display: grid; place-items: center; }
+.btn-primary { background: var(--primary) !important; color: #001018 !important; }
