@@ -135,6 +135,9 @@ Frontend: `BACKEND_ORIGIN` (server-side proxy target) and optionally `NEXT_PUBLI
 
 ## 5. Deploying to the RDP machine (where HANA is reachable)
 
+> Full copy-paste Windows runbook (services, HTTPS, troubleshooting): **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+> Serving external clients against their own company DBs: **[docs/MULTI_TENANT_PLAN.md](docs/MULTI_TENANT_PLAN.md)**.
+
 ```bash
 git pull origin main
 
