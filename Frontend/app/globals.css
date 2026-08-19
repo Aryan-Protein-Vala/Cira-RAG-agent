@@ -3,7 +3,35 @@
 @import 'shadcn/tailwind.css';
 @custom-variant dark (&:is(.dark *));
 @theme inline { --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring); --radius-sm: calc(var(--radius) * .6); --radius-md: calc(var(--radius) * .8); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) * 1.4); --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif; --font-mono: 'Geist Mono', ui-monospace, monospace; }
-:root, .dark { 
+/* Fix Functionality-3: proper light/dark split — :root is light, .dark overrides to dark */
+:root {
+  color-scheme: light;
+  --background: #f0f2f5;
+  --foreground: #0f172a;
+  --card: rgba(255, 255, 255, 0.7);
+  --card-foreground: #0f172a;
+  --popover: rgba(255, 255, 255, 0.85);
+  --popover-foreground: #0f172a;
+  --primary: #0284c7;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(0, 0, 0, 0.07);
+  --secondary-foreground: #0f172a;
+  --muted: rgba(0, 0, 0, 0.05);
+  --muted-foreground: rgba(15, 23, 42, 0.6);
+  --accent: rgba(0, 0, 0, 0.08);
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.12);
+  --input: rgba(255, 255, 255, 0.8);
+  --ring: rgba(2, 132, 199, 0.4);
+  --radius: 1rem;
+  --cursor-default: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="none" stroke="%230284c7" stroke-width="2"/><circle cx="12" cy="12" r="1.5" fill="%230f172a"/></svg>') 12 12, auto;
+  --cursor-pointer: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="%230f172a" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="%230284c7"/></svg>') 12 12, pointer;
+  --cursor-search: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="%237c3aed" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="%23a855f7"/></svg>') 12 12, text;
+}
+
+.dark {
   color-scheme: dark; 
   --background: transparent; 
   --foreground: #ffffff; 
@@ -136,7 +164,8 @@ button.avatar:hover { transform: scale(1.1); background: rgba(255, 255, 255, 0.2
 .row-count, .data-period { color: rgba(255, 255, 255, 0.5); font-size: 12px; }
 .data-period { margin: 6px 0 20px; }
 .mini-table { border: none; border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, 0.2); box-shadow: inset 4px 4px 10px rgba(0,0,0,0.4), inset -2px -2px 6px rgba(255,255,255,0.04); }
-.mini-row { display: grid; grid-template-columns: 1.2fr 1fr .7fr; gap: 14px; padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.7); font-size: 13px; }
+/* Fix Render-3: auto column sizing so long values don't clip equally */
+.mini-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.7); font-size: 13px; }
 .mini-row:last-child { border-bottom: 0; }
 .mini-head { color: #fff; background: rgba(255, 255, 255, 0.03); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
 .positive { color: #4ade80; }
@@ -179,6 +208,8 @@ button.avatar:hover { transform: scale(1.1); background: rgba(255, 255, 255, 0.2
 .send-button .brand-mark { transform: scale(0.7); } 
 .send-button .brand-mark span { background: #000; } 
 .history-search .brand-mark { transform: scale(0.6); opacity: 0.8; }
+/* Fix Render-6: typing-bubble wrapper just needs flex alignment, no extra padding/background */
+.typing-bubble { padding: 0 !important; background: transparent !important; border: none !important; box-shadow: none !important; backdrop-filter: none !important; width: fit-content !important; }
 .typing-indicator { display: flex; align-items: center; gap: 5px; padding: 14px 20px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px 20px 20px 4px; background: rgba(255, 255, 255, 0.04); width: fit-content; backdrop-filter: blur(16px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); } 
 .typing-indicator span { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: typing 1.4s infinite ease-in-out both; box-shadow: 0 0 8px color-mix(in srgb, var(--primary) 50%, transparent); } 
 .typing-indicator span:nth-child(1) { animation-delay: -0.32s; } 
@@ -215,3 +246,6 @@ button.avatar:hover { transform: scale(1.1); background: rgba(255, 255, 255, 0.2
 @media (max-width: 900px) { body { padding: 0; } .app-shell { height: 100dvh; width: 100vw; max-height: none; max-width: none; border-radius: 0; border: 0; } }
 @media (max-width: 720px) { .sidebar { position: absolute; z-index: 20; inset: 0 auto 0 0; width: min(300px, 86vw); transform: translateX(0); background: rgba(20, 20, 25, 0.85); backdrop-filter: blur(40px); box-shadow: 20px 0 60px rgba(0, 0, 0, 0.6); border-right: 1px solid rgba(255, 255, 255, 0.1); }.sidebar.collapsed { width: 0; padding: 28px 0; overflow: hidden; transform: translateX(-100%); border-right: 0; }.chat-header { padding: 15px 20px; background: rgba(0,0,0,0.3); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.1); }.mobile-menu { display: inline-grid; }.chat-scroll { padding: 40px 20px 140px; }.chat-container { padding: 0; }.composer-wrap { left: 0; padding: 15px; background: linear-gradient(transparent, rgba(0,0,0,0.7) 30%, rgba(0,0,0,0.9)); }.header-actions .theme-toggle { display: none; }.secondary-button { padding: 8px 12px; font-size: 0; }.secondary-button svg { margin: 0; }.chat-intro { margin-bottom: 40px; }.login-card { padding: 30px; }.login-top { top: 18px; right: 18px; left: 18px; } }
 @media (max-width: 430px) { .data-actions button { flex: 1 1 calc(50% - 10px); justify-content: center; }.data-actions button:last-child { flex-basis: 100%; }.message-content { max-width: calc(100% - 48px); } }
+/* Fix Render-5: mobile sidebar backdrop overlay */
+.mobile-sidebar-backdrop { display: none; }
+@media (max-width: 720px) { .mobile-sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 19; backdrop-filter: blur(2px); } }

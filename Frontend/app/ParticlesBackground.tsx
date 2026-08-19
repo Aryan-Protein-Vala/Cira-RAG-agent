@@ -29,7 +29,10 @@ export default function ParticlesBackground() {
     const handleResize = () => {
        width = canvas.width = window.innerWidth;
        height = canvas.height = window.innerHeight;
+       // Fix Render-4: cancel existing frame before reinitializing to prevent particle accumulation
+       cancelAnimationFrame(animationFrameId);
        init();
+       animate();
     };
     
     window.addEventListener("resize", handleResize);

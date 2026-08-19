@@ -171,7 +171,8 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
       </div>
 
       {/* Chart Canvas */}
-      <div style={{ width: '100%', height: 260 }}>
+      {/* Fix Render-2: explicit minHeight ensures ResponsiveContainer always measures > 0px */}
+      <div style={{ width: '100%', height: 260, minHeight: 260 }}>
         <ResponsiveContainer width="100%" height="100%">
           {activeType === 'bar' ? (
             <BarChart data={payload.data} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>

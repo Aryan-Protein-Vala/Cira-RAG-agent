@@ -142,10 +142,11 @@ async def stream_chat_query(
     system_prompt = (
         f"You are CIRA, the executive SAP Business One AI intelligence agent for company database '{SAP_B1_COMPANY_DB}' and user '{employee_id}'.\n"
         "CORE PROTOCOL:\n"
-        "1. When the user asks for data, reports, tables, or charts (e.g. sales, orders, invoices, inventory items, vendors, employees), ALWAYS invoke the 'query_sap_b1' tool with the matching entity.\n"
+        "1. When the user asks for data, reports, tables, or charts (e.g. sales, orders, invoices, inventory items, vendors, employees), ALWAYS invoke the 'query_sap_b1' tool.\n"
         "2. Valid entities: Orders, Items, Invoices, PurchaseOrders, BusinessPartners, EmployeesInfo.\n"
-        "3. When you query data, the system automatically renders interactive visual tables (with Excel export) and glowing chart components for the user.\n"
-        "4. In your text answer, give a direct, concise 1-2 sentence executive summary of the key metrics. Never refuse to provide tables or charts."
+        "3. CRITICAL: After calling the tool, the UI AUTOMATICALLY renders beautiful interactive tables and chart visualizations from the raw data — do NOT repeat the data in your text response.\n"
+        "4. Your ONLY text output after fetching data must be a crisp 1-2 sentence executive summary (e.g. 'You have 2 invoices totaling $79,400 with $63,200 already collected.'). NO inline tables, NO lists of rows, NO markdown tables.\n"
+        "5. Never refuse to fetch data — always call the tool immediately."
     )
     messages = [SystemMessage(content=system_prompt)]
     for msg in history:
@@ -156,16 +157,30 @@ async def stream_chat_query(
     messages.append(HumanMessage(content=query))
 
     # 3. Stream Events (v2) from LangGraph
+    sap_data_emitted = False  # once we emit tabular/chart, suppress LLM inline data text
+
     try:
         async for event in agent.astream_events({"messages": messages}, version="v2"):
             kind = event["event"]
 
-            # Stream LLM tokens
+            # Stream LLM text tokens
             if kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
                 content = chunk.content
                 if content and isinstance(content, str):
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': content})}\n\n"
+                    if sap_data_emitted:
+                        # Suppress markdown table rows / enumerated data lists
+                        lines = content.split("\n")
+                        clean = "\n".join(
+                            l for l in lines
+                            if not (l.strip().startswith("|") or
+                                    re.match(r"^\s*\d+[.)]\s+", l) or
+                                    re.match(r"^-{3,}", l))
+                        )
+                        if clean.strip():
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': clean})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': content})}\n\n"
 
             # Announce tool starts
             elif kind == "on_tool_start":
@@ -175,22 +190,42 @@ async def stream_chat_query(
                 elif tool_name == "query_company_docs":
                     yield f"data: {json.dumps({'type': 'source', 'name': 'Company Knowledge Base'})}\n\n"
 
-            # Handle tool ends (trigger DataCard & ChartCard if SAP)
+            # Handle tool ends — LangGraph wraps returns in a ToolMessage object
             elif kind == "on_tool_end":
                 tool_name = event["name"]
-                output = event["data"].get("output", "")
-                
-                if tool_name in ("query_sap_b1", "query_sap_odata") and isinstance(output, dict) and output.get("ok"):
+                raw_output = event["data"].get("output")
+
+                # Normalize output: ToolMessage → dict
+                output = {}
+                if isinstance(raw_output, dict):
+                    output = raw_output
+                elif raw_output is not None:
+                    # ToolMessage: .content is a JSON string of the actual return value
+                    content_str = getattr(raw_output, "content", None)
+                    if content_str is None:
+                        content_str = str(raw_output)
+                    try:
+                        output = json.loads(content_str)
+                    except Exception:
+                        # Last resort: try parsing the string representation
+                        try:
+                            import ast
+                            output = ast.literal_eval(content_str)
+                        except Exception:
+                            output = {}
+
+                if tool_name in ("query_sap_b1", "query_sap_odata") and output.get("ok"):
                     raw_data = output.get("data", [])
                     entity_name = output.get("entity", "SAP Data")
-                    
-                    # Yield tabular data directly so UI renders DataCard
+
+                    # Emit DataCard SSE event
                     yield f"data: {json.dumps({'type': 'tabular', 'data': raw_data, 'entity': entity_name})}\n\n"
-                    
-                    # Check if chart / visualization is relevant
+                    sap_data_emitted = True
+
+                    # Emit ChartCard SSE event when data is visualizable
                     chart_payload = _generate_chart_payload(entity_name, raw_data, query)
                     if chart_payload:
                         yield f"data: {json.dumps(chart_payload)}\n\n"
 
     except Exception as e:
-        yield f"data: {json.dumps({'type': 'chunk', 'text': f' An error occurred during reasoning: {str(e)}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'chunk', 'text': f'⚠ An error occurred: {str(e)}'})}\n\n"

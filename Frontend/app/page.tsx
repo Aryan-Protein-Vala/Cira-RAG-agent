@@ -520,6 +520,10 @@ export default function Page() {
       setSessions(current => [{ id: currentSessionId, title: chatTitle, date: 'Today' }, ...current]);
       
       // Fire background title generation
+      // Fix Functionality-2: capture sessionId in closure so rapid session switches
+      // don't clobber the active title of the newly selected session.
+      const capturedSessionId = currentSessionId;
+      const capturedChatTitle = chatTitle;
       fetch(`${API_BASE}/generate_title`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
@@ -528,13 +532,14 @@ export default function Page() {
       .then(res => res.json())
       .then(data => {
         if (data.title) {
-          fetch(`${API_BASE}/session/${currentSessionId}`, {
+          fetch(`${API_BASE}/session/${capturedSessionId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
             body: JSON.stringify({ title: data.title })
           }).then(() => {
-            setActive(curr => curr === chatTitle ? data.title : curr);
-            setSessions(curr => curr.map(s => s.id === currentSessionId ? { ...s, title: data.title } : s));
+            // Only update active title if this session is still active
+            setActiveId(curr => { if (curr === capturedSessionId) setActive(data.title); return curr; });
+            setSessions(curr => curr.map(s => s.id === capturedSessionId ? { ...s, title: data.title } : s));
           });
         }
       })
@@ -568,60 +573,60 @@ export default function Page() {
           'Authorization': `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ query: value, session_id: sessionId }),
-        signal: abortController.signal,  // Fix 6.2: fetch is cancellable
+        signal: abortController.signal,
       });
 
       if (!res.body) throw new Error('No stream');
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      // Fix Functionality-1: split on SSE event boundary (double newline)
+      // so partial TCP packets never discard a fragmented JSON payload.
       let buffer = '';
 
-      const processLines = (lines: string[]) => {
-        for (const line of lines) {
+      const processEvent = (event: string) => {
+        for (const line of event.split('\n')) {
           if (!line.startsWith('data: ')) continue;
-          try {
-            const parsed = jsonTryParse(line.slice(6));
-            if (!parsed) continue;
-            if (parsed.type === 'chunk') {
-              setMessages((current) => current.map((m: any) =>
-                m._streamingId === streamingId
-                  ? { ...m, content: m.content + parsed.text }
-                  : m
-              ));
-            } else if (parsed.type === 'tabular') {
-              setMessages((current) => current.map((m: any) =>
-                m._streamingId === streamingId
-                  ? { ...m, data: parsed.data, entity: parsed.entity }
-                  : m
-              ));
-            } else if (parsed.type === 'chart') {
-              setMessages((current) => current.map((m: any) =>
-                m._streamingId === streamingId
-                  ? { ...m, chart: parsed }
-                  : m
-              ));
-            } else if (parsed.type === 'source' && parsed.name) {
-              setMessages((current) => current.map((m: any) =>
-                m._streamingId === streamingId
-                  ? { ...m, sources: Array.from(new Set([...(m.sources || []), String(parsed.name)])) }
-                  : m
-              ));
-            }
-          } catch {}
+          const parsed = jsonTryParse(line.slice(6));
+          if (!parsed) continue;
+          if (parsed.type === 'chunk') {
+            setMessages((current) => current.map((m: any) =>
+              m._streamingId === streamingId
+                ? { ...m, content: m.content + parsed.text }
+                : m
+            ));
+          } else if (parsed.type === 'tabular') {
+            setMessages((current) => current.map((m: any) =>
+              m._streamingId === streamingId
+                ? { ...m, data: parsed.data, entity: parsed.entity }
+                : m
+            ));
+          } else if (parsed.type === 'chart') {
+            setMessages((current) => current.map((m: any) =>
+              m._streamingId === streamingId
+                ? { ...m, chart: parsed }
+                : m
+            ));
+          } else if (parsed.type === 'source' && parsed.name) {
+            setMessages((current) => current.map((m: any) =>
+              m._streamingId === streamingId
+                ? { ...m, sources: Array.from(new Set([...(m.sources || []), String(parsed.name)])) }
+                : m
+            ));
+          }
         }
       };
 
       while (true) {
         const { done, value: chunk } = await reader.read();
         if (done) {
-          // Fix 6.1: Drain remaining buffer after stream ends (handles streams without trailing \n)
-          if (buffer.trim()) processLines([buffer]);
+          if (buffer.trim()) processEvent(buffer);
           break;
         }
         buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        processLines(lines);
+        // Split on double-newline = SSE event boundary
+        const events = buffer.split('\n\n');
+        buffer = events.pop() ?? '';
+        events.forEach(processEvent);
       }
     } catch (err: any) {
       // AbortError is expected when user switches chat — not a real error
@@ -698,6 +703,8 @@ export default function Page() {
   return (
     <>
       <div className="chat-blur-film" style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(255, 255, 255, 0.4)', backdropFilter: 'blur(12px)' }} />
+      {/* Fix Render-5: mobile sidebar backdrop so tapping outside closes sidebar */}
+      {!collapsed && <div className="mobile-sidebar-backdrop" onClick={() => setCollapsed(true)} />}
       <main className="app-shell">
         <Sidebar 
           collapsed={collapsed} 
@@ -731,31 +738,33 @@ export default function Page() {
               <div className="intro-icon"><Sparkles size={20} /></div>
               <div><h1>Good morning, Alex.</h1><p>Ask questions about your SAP data in plain language.</p></div>
             </div>
-            {messages.map((message, index) => (
-              <div className={`message-row ${message.role}`} key={index}>
+            {messages.map((message: any, index) => (
+              // Fix Render-1: stable key using _streamingId if present, else content hash
+              <div className={`message-row ${message.role}`} key={message._streamingId ?? `${message.role}-${index}-${message.content?.slice(0,20)}`}>
                 <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
                 <div className="message-content">
                   <span className="message-author">{message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>· {message.timestamp || 'just now'}</small></span>
-                  <div className="bubble">
-                    {message.role === 'assistant' ? (
-                      message.content === '' && isThinking && index === messages.length - 1 ? (
-                        <div className="typing-indicator"><span /><span /><span /></div>
-                      ) : (
+                  {/* Fix Render-6: typing indicator outside bubble to avoid double padding */}
+                  {message.role === 'assistant' && message.content === '' && isThinking && index === messages.length - 1 ? (
+                    <div className="bubble typing-bubble"><div className="typing-indicator"><span /><span /><span /></div></div>
+                  ) : (
+                    <div className="bubble">
+                      {message.role === 'assistant' ? (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-                      )
-                    ) : (
-                      message.content
-                    )}
-                    {message.chart && <ChartCard payload={message.chart} />}
-                    {message.data && <DataCard payload={message.data} entity={message.entity} />}
-                    {message.sources && message.sources.length > 0 && (
-                      <div className="source-capsules">
-                        {message.sources.map((src: string, idx: number) => (
-                          <div key={idx} className="source-capsule"><Database size={12} /> {src}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      ) : (
+                        message.content
+                      )}
+                      {message.chart && <ChartCard payload={message.chart} />}
+                      {message.data && <DataCard payload={message.data} entity={message.entity} />}
+                      {message.sources && message.sources.length > 0 && (
+                        <div className="source-capsules">
+                          {message.sources.map((src: string, idx: number) => (
+                            <div key={`${src}-${idx}`} className="source-capsule"><Database size={12} /> {src}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -764,8 +773,25 @@ export default function Page() {
         <footer className="composer-wrap">
           <div className="composer">
             <button className="icon-button" onClick={() => fileRef.current?.click()} aria-label="Attach file"><Paperclip size={18} /></button>
-            <input ref={fileRef} type="file" hidden />
-            <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); submit() } }} placeholder="Ask anything about your SAP data..." rows={1} />
+            {/* Fix Functionality-6: file onChange handler */}
+            <input ref={fileRef} type="file" hidden onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) showToast(`File selected: ${file.name} (upload coming soon)`);
+            }} />
+            {/* Fix Functionality-5: auto-height textarea via onInput */}
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onInput={(event) => {
+                const el = event.currentTarget;
+                el.style.height = 'auto';
+                el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+              }}
+              onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); submit() } }}
+              placeholder="Ask anything about your SAP data..."
+              rows={1}
+              style={{ resize: 'none', overflowY: 'auto' }}
+            />
             <button className="send-button" disabled={isThinking} onClick={submit} aria-label="Send message"><BrandMark /></button>
           </div>
           <p className="composer-note">CIRA can make mistakes. Verify important data.</p>
@@ -799,7 +825,14 @@ export default function Page() {
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowProfile(false)}>Close</button>
-              <button className="btn-confirm" style={{background: 'var(--primary)', color: '#000'}} onClick={() => { showToast('Profile updated'); setShowProfile(false); }}>Save Changes</button>
+              <button className="btn-confirm" style={{background: 'var(--primary)', color: '#000'}} onClick={() => {
+                // Fix Functionality-4: persist profile to localStorage so it survives reload
+                localStorage.setItem('cira-profile-name', profileName);
+                localStorage.setItem('cira-profile-dept', profileDept);
+                localStorage.setItem('cira-profile-role', profileRole);
+                showToast('Profile updated');
+                setShowProfile(false);
+              }}>Save Changes</button>
             </div>
           </div>
         </div>
