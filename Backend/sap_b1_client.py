@@ -60,7 +60,7 @@ async def get_b1_session() -> dict | None:
 
 import asyncio
 
-async def execute_b1_query(entity: str, filters: dict = None, select_fields: list = None, top: int = 50) -> dict:
+async def execute_b1_query(entity: str, filters: dict = None, select_fields: list = None, top: int = 500) -> dict:
     """
     Query SAP Business One Service Layer entity set (e.g. Orders, Invoices, Items, BusinessPartners).
     Falls back gracefully to mock catalog or HANA direct connection.

@@ -18,9 +18,9 @@ try:
 except FileNotFoundError:
     CATALOG = {}
 
-# Mock settings
-MOCK_SAP = True
-SAP_ODATA_BASE_URL = "[SAP_ODATA_BASE_URL]"
+# MOCK_SAP must be False in production — reads from .env (default False)
+MOCK_SAP = os.getenv("MOCK_SAP", "false").lower() == "true"
+SAP_ODATA_BASE_URL = os.getenv("SAP_ODATA_BASE_URL", "")
 
 from sap_b1_client import execute_b1_query, SAP_B1_COMPANY_DB
 
@@ -103,7 +103,13 @@ async def stream_chat_query(
 
     # 1. Define tools dynamically to capture context
     @tool
-    async def query_sap_b1(entity: str, status: str = None, card_name: str = None, year: int = None) -> dict:
+    async def query_sap_b1(
+        entity: str,
+        status: str = None,
+        card_name: str = None,
+        year: int = None,
+        top: int = 500
+    ) -> dict:
         """
         Query SAP Business One on HANA live schema.
         Valid SAP B1 entities:
@@ -113,15 +119,17 @@ async def stream_chat_query(
         - 'PurchaseOrders' (Procurement & vendor orders / OPOR table)
         - 'BusinessPartners' (Customers & Vendors / OCRD table)
         - 'EmployeesInfo' (Staff & payroll / OHEM table)
-        - Legacy aliases also supported: 'SalesOrderSet', 'EmployeeSet', 'ProcurementSet'
         Optional filters: status ('Open'/'Closed'), card_name ('Acme'), year (2024).
+        top: max rows to return (default 500, max 2000).
         """
         filters = {}
         if status:
             filters["DocStatus"] = status
         if card_name:
             filters["CardName"] = card_name
-        return await execute_b1_query(entity=entity, filters=filters)
+        # Cap at 2000 to avoid memory issues on huge tables
+        safe_top = min(int(top), 2000)
+        return await execute_b1_query(entity=entity, filters=filters, top=safe_top)
 
     @tool
     async def query_company_docs(query: str) -> str:
@@ -158,27 +166,20 @@ async def stream_chat_query(
 
     # 3. Stream Events (v2) from LangGraph
     sap_data_emitted = False  # once we emit tabular/chart, suppress LLM inline data text
+    accumulated_text = []     # buffer all text chunks so we can post-filter whole lines
 
     try:
         async for event in agent.astream_events({"messages": messages}, version="v2"):
             kind = event["event"]
 
-            # Stream LLM text tokens
+            # Stream LLM text tokens — buffer them; emit only after filtering
             if kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
                 content = chunk.content
                 if content and isinstance(content, str):
                     if sap_data_emitted:
-                        # Suppress markdown table rows / enumerated data lists
-                        lines = content.split("\n")
-                        clean = "\n".join(
-                            l for l in lines
-                            if not (l.strip().startswith("|") or
-                                    re.match(r"^\s*\d+[.)]\s+", l) or
-                                    re.match(r"^-{3,}", l))
-                        )
-                        if clean.strip():
-                            yield f"data: {json.dumps({'type': 'chunk', 'text': clean})}\n\n"
+                        # Don't stream raw data lines — accumulate and suppress table/list rows
+                        accumulated_text.append(content)
                     else:
                         yield f"data: {json.dumps({'type': 'chunk', 'text': content})}\n\n"
 
@@ -226,6 +227,24 @@ async def stream_chat_query(
                     chart_payload = _generate_chart_payload(entity_name, raw_data, query)
                     if chart_payload:
                         yield f"data: {json.dumps(chart_payload)}\n\n"
+
+        # After full stream: flush any buffered text (LLM summary after tool call)
+        # Filter out raw table rows / enumerated lists — only emit clean summary sentences
+        if accumulated_text:
+            full = "".join(accumulated_text)
+            clean_lines = []
+            for line in full.split("\n"):
+                stripped = line.strip()
+                # Skip markdown table rows, dividers, numbered lists, bullet dumps
+                if (stripped.startswith("|") or
+                        re.match(r"^-{2,}", stripped) or
+                        re.match(r"^\d+[.)]\s+\S", stripped) or
+                        re.match(r"^[A-Z][a-zA-Z]+:\s+\$?[\d,]+", stripped)):
+                    continue
+                clean_lines.append(line)
+            summary = "\n".join(clean_lines).strip()
+            if summary:
+                yield f"data: {json.dumps({'type': 'chunk', 'text': summary})}\n\n"
 
     except Exception as e:
         yield f"data: {json.dumps({'type': 'chunk', 'text': f'⚠ An error occurred: {str(e)}'})}\n\n"
