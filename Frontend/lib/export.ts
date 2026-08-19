@@ -76,7 +76,7 @@ export async function exportToExcel(data: Row[], filename = 'sap_export.xlsx') {
         },
       }
     })
-    await writeXlsxFile(flat, { columns: sheetColumns, sheet: 'SAP Data' }).toFile(filename)
+    await writeXlsxFile(flat, { columns: sheetColumns, sheet: 'SAP Data', fileName: filename })
   } catch (error) {
     // Never leave the user without their data: fall back to CSV.
     console.error('XLSX export failed, falling back to CSV', error)
