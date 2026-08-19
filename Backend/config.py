@@ -104,7 +104,7 @@ LLM_PREVIEW_ROWS = _int("CIRA_LLM_PREVIEW_ROWS", 8)
 # ── LLM (OpenRouter by default, any OpenAI-compatible endpoint works) ────────
 OPENROUTER_API_KEY = _str("OPENROUTER_API_KEY") or _str("OPENAI_API_KEY")
 OPENROUTER_BASE_URL = _str("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-MODEL_NAME = _str("CIRA_MODEL", "anthropic/claude-3.5-sonnet")
+MODEL_NAME = _str("CIRA_MODEL", "openrouter/free")
 TITLE_MODEL_NAME = _str("CIRA_TITLE_MODEL", MODEL_NAME)
 LLM_TEMPERATURE = _float("CIRA_LLM_TEMPERATURE", 0.1)
 LLM_TIMEOUT_S = _float("CIRA_LLM_TIMEOUT_S", 90.0)

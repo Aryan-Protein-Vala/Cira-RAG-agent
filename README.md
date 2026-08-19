@@ -73,7 +73,7 @@ and known date/amount/party columns per table for automatic charting.
 | # | Problem | Fix |
 |---|---|---|
 | 1 | `requirements.txt` was missing **SQLAlchemy**, **aiosqlite** and **python-multipart** — a clean `pip install -r requirements.txt` produced a backend that crashed on import. | Full, pinned-minimum requirements list. |
-| 2 | Model name was `openrouter/free`, which does not exist → every LLM call failed. | `CIRA_MODEL` env (default `anthropic/claude-3.5-sonnet`), plus a deterministic planner fallback when no key is set. |
+| 2 | Model name was hard-coded in the source. | Now `CIRA_MODEL` env (default `openrouter/free`, OpenRouter's auto-routed free tier), plus a deterministic planner fallback when no key is set. |
 | 3 | Real HANA rows are `decimal.Decimal` / `datetime.date` / `bytes`; `json.dumps` raises on all three, so the **first live query would have killed the SSE stream**. Only the 2-row mock data ever serialised. | `sap/serialize.py` coerces every value; regression tests cover Decimal/date/bytes/NaN. |
 | 4 | Unknown entity names silently fell back to `TABLE_MAP.get(entity, "ORDR")` → asking for “deliveries” returned **sales orders presented as deliveries**. | Unknown tables raise an explanatory error with close matches; the agent then looks the name up. |
 | 5 | `DocStatus = 'Open'` was sent to HANA, but B1 stores `'O'` → “open invoices” always returned 0 rows. Service Layer needed `bost_Open`. | Value encoding/decoding layer for both paths. |
