@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, Moon, MoreHorizontal, Paperclip, Pencil, Plus, Search, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
+import { ArrowUp, BarChart3, Check, ChevronLeft, ChevronRight, Clipboard, Database, FileJson, FileSpreadsheet, LogOut, Menu, MessageSquare, Moon, MoreHorizontal, Paperclip, Pencil, Plus, Search, ShieldCheck, Sparkles, Sun, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { exportToExcel } from '@/lib/export'
+import { ChartCard, ChartPayload } from './ChartCard'
 
 const fallbackDataPayload = { 
   report: 'Q3 Procurement Variance', 
@@ -16,7 +17,7 @@ const fallbackDataPayload = {
   ] 
 }
 
-type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string; timestamp?: string }
+type Message = { role: 'user' | 'assistant'; content: string; data?: any; entity?: string; chart?: ChartPayload; timestamp?: string; sources?: string[] }
 type Session = { id: string; title: string; date: string }
 
 const initialMessages: Message[] = []
@@ -111,8 +112,32 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: stri
 function DataCard({ payload, entity }: { payload?: any; entity?: string }) { 
   const rawData: any[] = Array.isArray(payload) && payload.length > 0 ? payload : fallbackDataPayload.rows;
   const headers = Object.keys(rawData[0]);
-  const previewRows = rawData.slice(0, 3);
   const [copied, setCopied] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+
+  const filteredData = useMemo(() => {
+    let list = rawData;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(q)));
+    }
+    if (sortKey) {
+      list = [...list].sort((a, b) => {
+        const valA = a[sortKey];
+        const valB = b[sortKey];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortAsc ? valA - valB : valB - valA;
+        }
+        return sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+      });
+    }
+    return list;
+  }, [rawData, search, sortKey, sortAsc]);
+
+  const displayRows = showAll ? filteredData : filteredData.slice(0, 4);
 
   const copy = async () => {
     await navigator.clipboard?.writeText(JSON.stringify(rawData, null, 2));
@@ -129,28 +154,102 @@ function DataCard({ payload, entity }: { payload?: any; entity?: string }) {
     URL.revokeObjectURL(url);
   };
 
+  const toggleSort = (h: string) => {
+    if (sortKey === h) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(h);
+      setSortAsc(true);
+    }
+  };
+
   return (
     <div className="data-card">
       <div className="data-card-head">
         <div>
-          <span className="data-label"><BarChart3 size={13} /> STRUCTURED RESULT</span>
+          <span className="data-label"><BarChart3 size={13} /> STRUCTURED SAP RESULT</span>
           <strong>{entity ?? 'SAP Data'}</strong>
         </div>
-        <span className="row-count">{rawData.length} rows</span>
-      </div>
-      <p className="data-period">Previewing {previewRows.length} of {rawData.length} records</p>
-      <div className="mini-table">
-        <div className="mini-row mini-head" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 3)}, 1fr)` }}>
-          {headers.slice(0, 3).map((h) => <span key={h}>{h}</span>)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="row-count">{filteredData.length} records</span>
+          {rawData.length > 4 && (
+            <button 
+              onClick={() => setShowAll(!showAll)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#38bdf8',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'var(--cursor-pointer)'
+              }}
+            >
+              {showAll ? 'Show Less' : `View All (${rawData.length})`}
+            </button>
+          )}
         </div>
-        {previewRows.map((row, i) => (
-          <div className="mini-row" key={i} style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 3)}, 1fr)` }}>
-            {headers.slice(0, 3).map((h) => (
-              <span key={h}>{String(row[h] ?? '')}</span>
+      </div>
+
+      {showAll && (
+        <div style={{ margin: '10px 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '10px',
+            padding: '6px 10px',
+            flex: 1
+          }}>
+            <Search size={13} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
+            <input 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              placeholder="Filter records..." 
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#fff',
+                fontSize: '12px',
+                width: '100%'
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <p className="data-period" style={{ marginTop: '4px', marginBottom: '12px' }}>
+        Showing {displayRows.length} of {filteredData.length} entries {sortKey ? `· Sorted by ${sortKey} (${sortAsc ? 'ASC' : 'DESC'})` : ''}
+      </p>
+
+      <div className="mini-table" style={{ maxHeight: showAll ? '320px' : 'none', overflowY: showAll ? 'auto' : 'visible' }}>
+        <div className="mini-row mini-head" style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 5)}, 1fr)` }}>
+          {headers.slice(0, 5).map((h) => (
+            <span 
+              key={h} 
+              onClick={() => toggleSort(h)} 
+              style={{ cursor: 'var(--cursor-pointer)', display: 'flex', alignItems: 'center', gap: '4px' }}
+              title="Click to sort"
+            >
+              {h} {sortKey === h ? (sortAsc ? '▲' : '▼') : ''}
+            </span>
+          ))}
+        </div>
+        {displayRows.map((row, i) => (
+          <div className="mini-row" key={i} style={{ gridTemplateColumns: `repeat(${Math.min(headers.length, 5)}, 1fr)` }}>
+            {headers.slice(0, 5).map((h) => (
+              <span key={h} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {String(row[h] ?? '')}
+              </span>
             ))}
           </div>
         ))}
       </div>
+
       <div className="data-actions">
         <button onClick={() => exportToExcel(rawData, `${entity ?? 'sap'}_export.xlsx`)}>
           <FileSpreadsheet size={14} /> Download Excel
@@ -162,7 +261,39 @@ function DataCard({ payload, entity }: { payload?: any; entity?: string }) {
   )
 }
 
-function Sidebar({ collapsed, onToggle, onLogout, activeId, onSelect, sessions, setSessions, theme, onTheme, sessionToken, employeeId }: { collapsed: boolean; onToggle: () => void; onLogout: () => void; activeId: string; onSelect: (id: string, title: string) => void; sessions: Session[]; setSessions: (sessions: Session[]) => void; theme: 'light' | 'dark'; onTheme: () => void; sessionToken: string; employeeId: string; }) { 
+type ToastType = { id: number; message: string; type: 'success' | 'error' };
+
+function Sidebar({ 
+  collapsed, 
+  onToggle, 
+  onLogout, 
+  activeId, 
+  onSelect, 
+  sessions, 
+  setSessions, 
+  theme, 
+  onTheme, 
+  sessionToken, 
+  employeeId, 
+  showToast,
+  onRequestDelete,
+  onOpenProfile
+}: { 
+  collapsed: boolean; 
+  onToggle: () => void; 
+  onLogout: () => void; 
+  activeId: string; 
+  onSelect: (id: string, title: string) => void; 
+  sessions: Session[]; 
+  setSessions: (sessions: Session[]) => void; 
+  theme: 'light' | 'dark'; 
+  onTheme: () => void; 
+  sessionToken: string; 
+  employeeId: string; 
+  showToast: (msg: string, type?: 'success' | 'error') => void;
+  onRequestDelete: (session: Session) => void;
+  onOpenProfile: () => void;
+}) { 
   const [query, setQuery] = useState(''); 
   const [menu, setMenu] = useState<string | null>(null); 
   const [editing, setEditing] = useState<string | null>(null); 
@@ -175,48 +306,39 @@ function Sidebar({ collapsed, onToggle, onLogout, activeId, onSelect, sessions, 
     if (title && title !== oldTitle) {
       setSessions(sessions.map((s) => s.id === id ? { ...s, title } : s));
       try {
-        await fetch(`http://localhost:8000/session/${id}`, {
+        const res = await fetch(`http://localhost:8000/session/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
           body: JSON.stringify({ title })
         });
-      } catch (err) { console.error('Rename failed', err) }
+        if (res.ok) showToast('Chat renamed', 'success');
+      } catch (err) { 
+        console.error('Rename failed', err);
+        showToast('Rename failed', 'error');
+      }
     }
     setEditing(null);
   }; 
-  const remove = async (session: Session) => { 
-    setSessions(sessions.filter((s) => s.id !== session.id)); 
-    setMenu(null); 
-    if (activeId === session.id) onSelect('new', 'New conversation');
-    try {
-      await fetch(`http://localhost:8000/session/${session.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${sessionToken}` }
-      });
-    } catch (err) { console.error('Delete failed', err) }
-  };
   
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
-        <div className="sidebar-brand"><BrandMark /><span>CIRA</span></div>
-        <button className="icon-button" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        <button className="sidebar-brand-btn" onClick={collapsed ? onToggle : undefined}>
+          <BrandMark />
+          <span className="brand-text">CIRA</span>
+        </button>
+        <button className="icon-button toggle-btn" onClick={onToggle} aria-label="Toggle sidebar">
+          <ChevronLeft size={18} />
         </button>
       </div>
-      {!collapsed && (
-        <>
-          <div className="sidebar-actions">
-            <button className="new-chat" onClick={() => onSelect('new', 'New conversation')}>
-              <Plus size={16} /> 
-              <span>New chat</span>
-            </button>
-            {/* <button className="theme-toggle" onClick={onTheme} aria-label="Toggle theme">
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button> */}
-          </div>
-          <div className="history-search"><BrandMark /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
-          <div className="history">
+      <div className="sidebar-actions">
+        <button className="new-chat" onClick={() => onSelect('new', 'New conversation')}>
+          <Plus size={16} /> 
+          <span>New chat</span>
+        </button>
+      </div>
+      <div className="history-search"><BrandMark /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history" /></div>
+      <div className="history">
             <div className="history-group">
               {filtered.map((session) => (
                 <div className={`history-item ${activeId === session.id ? 'active' : ''}`} key={session.id} onClick={() => editing !== session.id && onSelect(session.id, session.title)}>
@@ -231,21 +353,26 @@ function Sidebar({ collapsed, onToggle, onLogout, activeId, onSelect, sessions, 
                   <button className="history-menu-button" onClick={(event) => { event.stopPropagation(); setMenu(menu === session.id ? null : session.id) }} aria-label={`Options for ${session.title}`}><MoreHorizontal size={16} /></button>
                   {menu === session.id && (
                     <div className="history-menu" onClick={(event) => event.stopPropagation()}>
-                      <button onClick={() => rename(session)}><Pencil size={14} /> Rename</button>
-                      <button className="delete-action" onClick={() => remove(session)}><Trash2 size={14} /> Delete</button>
+                          <button onClick={() => rename(session)}><Pencil size={14} /> Rename</button>
+                          <button className="delete-action" onClick={() => { setMenu(null); onRequestDelete(session); }}><Trash2 size={14} /> Delete</button>
                     </div>
                   )}
                 </div>
               ))}
             </div>
           </div>
-          <div className="profile">
-            <div className="avatar">AM</div>
-            <div className="profile-info"><strong>Alex Morgan</strong><span>EMP-20481</span></div>
-            <button className="icon-button" onClick={onLogout} aria-label="Log out"><LogOut size={16} /></button>
-          </div>
-        </>
-      )}
+      <div className="profile">
+        <button 
+          className="avatar" 
+          onClick={onOpenProfile} 
+          aria-label="Open user profile" 
+          type="button"
+        >
+          AM
+        </button>
+        <div className="profile-info"><strong>Alex Morgan</strong><span>EMP-20481</span></div>
+        <button className="icon-button logout-btn" onClick={(e) => { e.stopPropagation(); onLogout(); }} aria-label="Log out"><LogOut size={16} /></button>
+      </div>
     </aside>
   ) 
 }
@@ -260,13 +387,47 @@ export default function Page() {
   const [active, setActive] = useState('New conversation'); 
   const [messages, setMessages] = useState<Message[]>(initialMessages); 
   const [input, setInput] = useState(''); 
-  const [sessions, setSessions] = useState(initialSessions); 
+  const [sessions, setSessions] = useState<Session[]>(initialSessions); 
   const [theme, setTheme] = useState<'light' | 'dark'>('light'); 
   const [isThinking, setIsThinking] = useState(false);
+  const [toasts, setToasts] = useState<ToastType[]>([]);
+  const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileName, setProfileName] = useState('Alex Morgan');
+  const [profileDept, setProfileDept] = useState('Sales & Logistics');
+  const [profileRole, setProfileRole] = useState('Senior Manager');
   const autoScrollRef = useRef(true);
   const fileRef = useRef<HTMLInputElement>(null); 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);  // Fix 6.2: cancel in-flight streams on session switch
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    const id = Date.now();
+    setToasts(current => [...current, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(current => current.filter(t => t.id !== id));
+    }, 3000);
+  };
+
+  const removeSession = async (session: Session) => { 
+    setSessions(current => current.filter((s) => s.id !== session.id)); 
+    setSessionToDelete(null);
+    if (activeId === session.id) selectChat('new', 'New conversation');
+    try {
+      const res = await fetch(`http://localhost:8000/session/${session.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
+      });
+      if (res.ok || res.status === 404) {
+        showToast('Chat deleted', 'success');
+      } else {
+        showToast('Failed to delete chat', 'error');
+      }
+    } catch (err) { 
+      console.error('Delete failed', err);
+      showToast('Error connecting to server', 'error');
+    }
+  };
 
   useEffect(() => {
     const savedToken = localStorage.getItem('cira-token');
@@ -375,6 +536,10 @@ export default function Page() {
     const streamingId = Date.now();
     setMessages((current) => [...current, { role: 'assistant', content: '', timestamp, _streamingId: streamingId } as any]);
 
+    const jsonTryParse = (str: string) => {
+      try { return JSON.parse(str) } catch { return null }
+    };
+
     try {
       const res = await fetch('http://localhost:8000/chat', {
         method: 'POST',
@@ -395,7 +560,8 @@ export default function Page() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           try {
-            const parsed = JSON.parse(line.slice(6));
+            const parsed = jsonTryParse(line.slice(6));
+            if (!parsed) continue;
             if (parsed.type === 'chunk') {
               setMessages((current) => current.map((m: any) =>
                 m._streamingId === streamingId
@@ -406,6 +572,18 @@ export default function Page() {
               setMessages((current) => current.map((m: any) =>
                 m._streamingId === streamingId
                   ? { ...m, data: parsed.data, entity: parsed.entity }
+                  : m
+              ));
+            } else if (parsed.type === 'chart') {
+              setMessages((current) => current.map((m: any) =>
+                m._streamingId === streamingId
+                  ? { ...m, chart: parsed }
+                  : m
+              ));
+            } else if (parsed.type === 'source') {
+              setMessages((current) => current.map((m: any) =>
+                m._streamingId === streamingId
+                  ? { ...m, sources: Array.from(new Set([...(m.sources || []), parsed.name])) }
                   : m
               ));
             }
@@ -494,7 +672,22 @@ export default function Page() {
     <>
       <div className="chat-blur-film" style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(255, 255, 255, 0.4)', backdropFilter: 'blur(12px)' }} />
       <main className="app-shell">
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onLogout={handleLogout} activeId={activeId} onSelect={selectChat} sessions={sessions} setSessions={setSessions} theme={theme} onTheme={toggleTheme} sessionToken={sessionToken} employeeId={employeeId} />
+        <Sidebar 
+          collapsed={collapsed} 
+          onToggle={() => setCollapsed(!collapsed)} 
+          onLogout={handleLogout} 
+          activeId={activeId} 
+          onSelect={selectChat} 
+          sessions={sessions} 
+          setSessions={setSessions} 
+          theme={theme} 
+          onTheme={toggleTheme} 
+          sessionToken={sessionToken} 
+          employeeId={employeeId} 
+          showToast={showToast}
+          onRequestDelete={(s) => setSessionToDelete(s)}
+          onOpenProfile={() => setShowProfile(true)}
+        />
         <section className="chat-shell">
         <header className="chat-header">
           <div className="mobile-title">
@@ -526,7 +719,15 @@ export default function Page() {
                     ) : (
                       message.content
                     )}
+                    {message.chart && <ChartCard payload={message.chart} />}
                     {message.data && <DataCard payload={message.data} entity={message.entity} />}
+                    {message.sources && message.sources.length > 0 && (
+                      <div className="source-capsules">
+                        {message.sources.map((src: string, idx: number) => (
+                          <div key={idx} className="source-capsule"><Database size={12} /> {src}</div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -544,6 +745,47 @@ export default function Page() {
         </footer>
       </section>
       </main>
+
+      {/* Full-screen Centered Modals */}
+      {sessionToDelete && (
+        <div className="modal-overlay" onClick={() => setSessionToDelete(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Delete Chat</h3>
+            <p>Are you sure you want to delete "{sessionToDelete.title}"? This cannot be undone.</p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setSessionToDelete(null)}>Cancel</button>
+              <button className="btn-confirm" onClick={() => removeSession(sessionToDelete)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProfile && (
+        <div className="modal-overlay" onClick={() => setShowProfile(false)}>
+          <div className="modal-content profile-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>User Profile</h3>
+            <div className="profile-form">
+              <label>Name <input value={profileName} onChange={(e) => setProfileName(e.target.value)} /></label>
+              <label>Employee ID <input defaultValue={employeeId} disabled /></label>
+              <label>Department <input value={profileDept} onChange={(e) => setProfileDept(e.target.value)} /></label>
+              <label>Role <input value={profileRole} onChange={(e) => setProfileRole(e.target.value)} /></label>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setShowProfile(false)}>Close</button>
+              <button className="btn-confirm" style={{background: 'var(--primary)', color: '#000'}} onClick={() => { showToast('Profile updated'); setShowProfile(false); }}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast ${t.type}`}>
+            {t.type === 'success' ? <Check size={16} /> : <Trash2 size={16} />}
+            <span>{t.message}</span>
+          </div>
+        ))}
+      </div>
     </>
   ) 
 }

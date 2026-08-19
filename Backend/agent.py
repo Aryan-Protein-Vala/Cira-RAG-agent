@@ -93,6 +93,48 @@ async def _execute_sap_odata(entity: str, filters_dict: dict, sap_token: str, em
         return {"ok": True, "entity": entity, "url": url, "data": payload.get("d", {}).get("results", [])}
 
 
+def _generate_chart_payload(entity: str, data: list, user_query: str) -> dict | None:
+    if not data or not isinstance(data, list) or len(data) == 0:
+        return None
+    
+    q_lower = user_query.lower()
+    chart_type = 'bar'
+    if 'pie' in q_lower or 'distribution' in q_lower or 'share' in q_lower:
+        chart_type = 'pie'
+    elif 'line' in q_lower or 'trend' in q_lower or 'growth' in q_lower or 'over time' in q_lower:
+        chart_type = 'line'
+    elif 'area' in q_lower:
+        chart_type = 'area'
+
+    if entity == "SalesOrderSet":
+        x_key = "CustomerName" if "CustomerName" in data[0] else ("Plant" if "Plant" in data[0] else "SalesOrderID")
+        y_key = "NetAmount"
+        title = f"Sales Order Value by {x_key}"
+    elif entity == "EmployeeSet":
+        x_key = "Department" if "Department" in data[0] else "JobTitle"
+        y_key = "Salary"
+        title = f"Compensation Breakdown by {x_key}"
+    elif entity == "ProcurementSet":
+        x_key = "VendorName" if "VendorName" in data[0] else ("MaterialName" if "MaterialName" in data[0] else "Plant")
+        y_key = "NetAmount" if "NetAmount" in data[0] else "Quantity"
+        title = f"Procurement Spend by {x_key}"
+    else:
+        keys = list(data[0].keys())
+        x_key = next((k for k in keys if isinstance(data[0][k], str)), keys[0])
+        y_key = next((k for k in keys if isinstance(data[0][k], (int, float))), keys[-1])
+        title = f"{entity} Metrics"
+
+    return {
+        "type": "chart",
+        "chartType": chart_type,
+        "title": title,
+        "data": data,
+        "xKey": x_key,
+        "yKey": y_key,
+        "category": f"SAP {entity}"
+    }
+
+
 async def stream_chat_query(
     query: str,
     history: list,
@@ -130,18 +172,20 @@ async def stream_chat_query(
     tools = [query_sap_odata, query_company_docs]
     agent = create_react_agent(llm, tools)
 
-    # 2. Build Message History
+    # 2. Build Message History with Strict Cut-to-the-Chase System Prompt
     system_prompt = (
-        f"You are CIRA, an enterprise SAP Intelligence Agent for user {employee_id}. "
-        "Use your tools to answer data queries. "
-        "IMPORTANT: Only use entity names exactly as defined in your tool schema."
+        f"You are CIRA, the executive SAP intelligence agent for employee {employee_id}.\n"
+        "EXECUTIVE COMMUNICATION PROTOCOL:\n"
+        "1. Be extremely direct, crisp, and cut to the chase (maximum 1-2 short sentences).\n"
+        "2. DO NOT generate markdown tables, ascii grids, or bullet lists of data rows, because our UI renders interactive visual tables and chart cards automatically.\n"
+        "3. Simply state the high-level summary or key takeaway in one clear sentence.\n"
+        "4. Always query exact SAP entities: SalesOrderSet, EmployeeSet, ProcurementSet."
     )
     messages = [SystemMessage(content=system_prompt)]
     for msg in history:
         if msg.role == "user":
             messages.append(HumanMessage(content=msg.content))
         elif msg.role == "assistant":
-            # For simplicity, passing basic assistant text history
             messages.append(AIMessage(content=msg.content))
     messages.append(HumanMessage(content=query))
 
@@ -155,31 +199,32 @@ async def stream_chat_query(
                 chunk = event["data"]["chunk"]
                 content = chunk.content
                 if content and isinstance(content, str):
-                    # Replace newlines so they don't break SSE framing (if streaming raw tokens)
-                    # For safety, yield word by word or token by token
                     yield f"data: {json.dumps({'type': 'chunk', 'text': content})}\n\n"
 
             # Announce tool starts
             elif kind == "on_tool_start":
                 tool_name = event["name"]
-                if tool_name in ["query_sap_odata", "query_company_docs"]:
-                    msg = f"\n\n*[Agent: invoking {tool_name}...]*\n\n"
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': msg})}\n\n"
+                if tool_name == "query_sap_odata":
+                    yield f"data: {json.dumps({'type': 'source', 'name': 'SAP OData API'})}\n\n"
+                elif tool_name == "query_company_docs":
+                    yield f"data: {json.dumps({'type': 'source', 'name': 'Company Knowledge Base'})}\n\n"
 
-            # Handle tool ends (trigger DataCard if SAP)
+            # Handle tool ends (trigger DataCard & ChartCard if SAP)
             elif kind == "on_tool_end":
                 tool_name = event["name"]
                 output = event["data"].get("output", "")
                 
                 if tool_name == "query_sap_odata" and isinstance(output, dict) and output.get("ok"):
-                    # Yield tabular data directly so UI can render DataCard
-                    yield f"data: {json.dumps({'type': 'tabular', 'data': output['data'], 'entity': output['entity']})}\n\n"
-                    msg = f"\n\n*[Agent: SAP returned {len(output['data'])} records]*\n\n"
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': msg})}\n\n"
-                
-                elif tool_name == "query_company_docs":
-                    msg = f"\n\n*[Agent: Retrieved document context]*\n\n"
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': msg})}\n\n"
+                    raw_data = output.get("data", [])
+                    entity_name = output.get("entity", "SAP Data")
+                    
+                    # Yield tabular data directly so UI renders DataCard
+                    yield f"data: {json.dumps({'type': 'tabular', 'data': raw_data, 'entity': entity_name})}\n\n"
+                    
+                    # Check if chart / visualization is relevant
+                    chart_payload = _generate_chart_payload(entity_name, raw_data, query)
+                    if chart_payload:
+                        yield f"data: {json.dumps(chart_payload)}\n\n"
 
     except Exception as e:
         yield f"data: {json.dumps({'type': 'chunk', 'text': f' An error occurred during reasoning: {str(e)}'})}\n\n"
