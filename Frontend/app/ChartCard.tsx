@@ -1,232 +1,219 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react'
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  AreaChart,
   Area,
-  PieChart,
-  Pie,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
   Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend
-} from 'recharts';
-import { BarChart3, LineChart as LineIcon, PieChart as PieIcon, TrendingUp } from 'lucide-react';
+} from 'recharts'
+import { AreaChart as AreaIcon, BarChart3, LineChart as LineIcon, PieChart as PieIcon, TrendingUp } from 'lucide-react'
+
+export type ChartType = 'bar' | 'line' | 'pie' | 'area'
 
 export interface ChartPayload {
-  chartType?: 'bar' | 'line' | 'pie' | 'area';
-  title?: string;
-  data: Array<Record<string, any>>;
-  xKey?: string;
-  yKey?: string;
-  category?: string;
+  chartType?: ChartType
+  title?: string
+  data: Array<Record<string, any>>
+  xKey?: string
+  yKey?: string
+  category?: string
+  aggregated?: boolean
+  points?: number
+  sourceRows?: number
 }
 
-const COLORS = ['#38bdf8', '#818cf8', '#c084fc', '#34d399', '#fbbf24', '#f87171'];
+const COLORS = ['#38bdf8', '#818cf8', '#c084fc', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#f472b6']
+
+const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [
+  { id: 'bar', label: 'Bar', icon: <BarChart3 size={13} /> },
+  { id: 'line', label: 'Line', icon: <LineIcon size={13} /> },
+  { id: 'area', label: 'Area', icon: <AreaIcon size={13} /> },
+  { id: 'pie', label: 'Pie', icon: <PieIcon size={13} /> },
+]
+
+function compact(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  return String(Math.round(value * 100) / 100)
+}
+
+function humanise(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 export function ChartCard({ payload }: { payload: ChartPayload }) {
-  if (!payload || !payload.data || payload.data.length === 0) return null;
+  // IMPORTANT: hooks must run on every render — the old component returned
+  // early *before* useState, which crashed React ("rendered fewer hooks than
+  // expected") as soon as a chart-less answer followed a chart answer.
+  const rows = Array.isArray(payload?.data) ? payload.data : []
+  const [activeType, setActiveType] = useState<ChartType>(payload?.chartType || 'bar')
 
-  const initialType = payload.chartType || 'bar';
-  const [activeType, setActiveType] = useState<'bar' | 'line' | 'pie' | 'area'>(initialType);
+  const { xKey, yKey } = useMemo(() => {
+    const first = rows[0] ?? {}
+    const keys = Object.keys(first)
+    const x = payload?.xKey && keys.includes(payload.xKey)
+      ? payload.xKey
+      : keys.find((k) => typeof first[k] === 'string') || keys[0]
+    const y = payload?.yKey && keys.includes(payload.yKey)
+      ? payload.yKey
+      : keys.find((k) => typeof first[k] === 'number' && k !== x) || keys[1] || keys[0]
+    return { xKey: x, yKey: y }
+  }, [rows, payload?.xKey, payload?.yKey])
 
-  // Auto-detect keys if not provided
-  const keys = Object.keys(payload.data[0]);
-  const xKey = payload.xKey || keys.find(k => typeof payload.data[0][k] === 'string') || keys[0];
-  const yKey = payload.yKey || keys.find(k => typeof payload.data[0][k] === 'number') || keys[1] || keys[0];
+  const data = useMemo(
+    () =>
+      rows.map((row) => ({
+        ...row,
+        [yKey]: typeof row[yKey] === 'string' ? Number(row[yKey]) || 0 : row[yKey],
+      })),
+    [rows, yKey],
+  )
+
+  if (!payload || data.length === 0 || !xKey || !yKey) return null
+
+  const axisColor = 'var(--chart-axis)'
+  const gridColor = 'var(--chart-grid)'
 
   const CustomTooltip = ({ active, payload: tooltipPayload, label }: any) => {
-    if (active && tooltipPayload && tooltipPayload.length) {
-      return (
-        <div style={{
-          background: 'rgba(25, 25, 30, 0.9)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: '12px',
-          padding: '10px 14px',
-          color: '#fff',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-          fontSize: '12px',
-          lineHeight: '1.4'
-        }}>
-          <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.7)' }}>{label}</p>
-          <p style={{ margin: 0, fontWeight: 700, color: '#38bdf8' }}>
-            {yKey}: {typeof tooltipPayload[0].value === 'number' && !isNaN(tooltipPayload[0].value) ? Number(tooltipPayload[0].value).toLocaleString() : String(tooltipPayload[0].value ?? '')}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+    if (!active || !tooltipPayload?.length) return null
+    const value = tooltipPayload[0].value
+    const name = tooltipPayload[0].payload?.[xKey] ?? label
+    return (
+      <div className="chart-tooltip">
+        <p className="chart-tooltip-label">{String(name)}</p>
+        <p className="chart-tooltip-value">
+          {humanise(yKey)}: {typeof value === 'number' && !Number.isNaN(value) ? value.toLocaleString() : String(value ?? '')}
+        </p>
+      </div>
+    )
+  }
+
+  const axisProps = {
+    stroke: axisColor,
+    fontSize: 11,
+    tickLine: false,
+  } as const
 
   return (
-    <div className="chart-card" style={{
-      width: 'min(680px, 100%)',
-      marginTop: '16px',
-      padding: '20px',
-      borderRadius: '20px',
-      background: 'rgba(255, 255, 255, 0.04)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
-      backdropFilter: 'blur(16px)',
-      boxShadow: '0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
-      transition: 'all 0.25s ease'
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '18px',
-        flexWrap: 'wrap',
-        gap: '10px'
-      }}>
+    <div className="chart-card">
+      <div className="chart-card-head">
         <div>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: '#38bdf8',
-            fontSize: '10px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.15em'
-          }}>
+          <span className="data-label">
             <TrendingUp size={13} /> {payload.category || 'ANALYTICS VISUALIZATION'}
           </span>
-          <strong style={{ display: 'block', fontSize: '15px', fontWeight: 600, marginTop: '4px', color: '#fff' }}>
-            {payload.title || `${yKey} by ${xKey}`}
-          </strong>
+          <strong>{payload.title || `${humanise(yKey)} by ${humanise(xKey)}`}</strong>
+          {payload.aggregated && payload.sourceRows ? (
+            <span className="chart-subtitle">
+              {payload.points} groups aggregated from {payload.sourceRows.toLocaleString()} rows
+            </span>
+          ) : null}
         </div>
 
-        {/* Chart View Switcher */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          background: 'rgba(0, 0, 0, 0.25)',
-          padding: '4px',
-          borderRadius: '10px',
-          border: '1px solid rgba(255, 255, 255, 0.08)'
-        }}>
-          <button
-            onClick={() => setActiveType('bar')}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeType === 'bar' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-              color: activeType === 'bar' ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)',
-              cursor: 'var(--cursor-pointer)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: 600
-            }}
-          >
-            <BarChart3 size={13} /> Bar
-          </button>
-          <button
-            onClick={() => setActiveType('line')}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeType === 'line' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-              color: activeType === 'line' ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)',
-              cursor: 'var(--cursor-pointer)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: 600
-            }}
-          >
-            <LineIcon size={13} /> Line
-          </button>
-          <button
-            onClick={() => setActiveType('pie')}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeType === 'pie' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-              color: activeType === 'pie' ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)',
-              cursor: 'var(--cursor-pointer)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: 600
-            }}
-          >
-            <PieIcon size={13} /> Pie
-          </button>
+        <div className="chart-switcher" role="group" aria-label="Chart type">
+          {CHART_TYPES.map((type) => (
+            <button
+              key={type.id}
+              onClick={() => setActiveType(type.id)}
+              className={activeType === type.id ? 'active' : ''}
+              aria-pressed={activeType === type.id}
+            >
+              {type.icon} {type.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Chart Canvas */}
-      {/* Fix Render-2: explicit minHeight ensures ResponsiveContainer always measures > 0px */}
-      <div style={{ width: '100%', height: 260, minHeight: 260 }}>
+      {/* explicit height: ResponsiveContainer measures 0px inside a flex parent */}
+      <div style={{ width: '100%', height: 280, minHeight: 280 }}>
         <ResponsiveContainer width="100%" height="100%">
           {activeType === 'bar' ? (
-            <BarChart data={payload.data} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>
+            <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
               <defs>
-                <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.9} />
-                  <stop offset="100%" stopColor="#818cf8" stopOpacity={0.4} />
+                <linearGradient id="ciraBarGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.95} />
+                  <stop offset="100%" stopColor="#818cf8" stopOpacity={0.45} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" vertical={false} />
-              <XAxis dataKey={xKey} stroke="rgba(255, 255, 255, 0.4)" fontSize={11} tickLine={false} dy={8} />
-              <YAxis stroke="rgba(255, 255, 255, 0.4)" fontSize={11} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
-              <Bar dataKey={yKey} fill="url(#barGradient)" radius={[8, 8, 0, 0]} />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" angle={data.length > 8 ? -20 : 0} textAnchor={data.length > 8 ? 'end' : 'middle'} height={data.length > 8 ? 60 : 30} />
+              <YAxis {...axisProps} tickFormatter={compact} width={64} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(125, 165, 255, 0.08)' }} />
+              <Bar dataKey={yKey} fill="url(#ciraBarGradient)" radius={[8, 8, 0, 0]} maxBarSize={64} />
             </BarChart>
           ) : activeType === 'line' ? (
-            <LineChart data={payload.data} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" vertical={false} />
-              <XAxis dataKey={xKey} stroke="rgba(255, 255, 255, 0.4)" fontSize={11} tickLine={false} dy={8} />
-              <YAxis stroke="rgba(255, 255, 255, 0.4)" fontSize={11} tickLine={false} />
+            <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
+              <YAxis {...axisProps} tickFormatter={compact} width={64} />
               <Tooltip content={<CustomTooltip />} />
               <Line
                 type="monotone"
                 dataKey={yKey}
                 stroke="#38bdf8"
                 strokeWidth={3}
-                dot={{ fill: '#38bdf8', r: 4, stroke: '#fff', strokeWidth: 2 }}
-                activeDot={{ r: 7, fill: '#38bdf8', stroke: '#fff', strokeWidth: 2 }}
+                dot={data.length <= 30 ? { fill: '#38bdf8', r: 3 } : false}
+                activeDot={{ r: 6 }}
               />
             </LineChart>
+          ) : activeType === 'area' ? (
+            <AreaChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
+              <defs>
+                <linearGradient id="ciraAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.7} />
+                  <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
+              <YAxis {...axisProps} tickFormatter={compact} width={64} />
+              <Tooltip content={<CustomTooltip />} />
+              <Area type="monotone" dataKey={yKey} stroke="#38bdf8" strokeWidth={2} fill="url(#ciraAreaGradient)" />
+            </AreaChart>
           ) : (
             <PieChart>
               <Tooltip content={<CustomTooltip />} />
               <Pie
-                data={payload.data}
+                data={data}
                 dataKey={yKey}
                 nameKey={xKey}
                 cx="50%"
                 cy="50%"
-                outerRadius={90}
-                innerRadius={50}
-                paddingAngle={4}
+                outerRadius={92}
+                innerRadius={52}
+                paddingAngle={3}
               >
-                {payload.data.map((_, index) => (
+                {data.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
               <Legend
-                formatter={(val) => <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '11px' }}>{val}</span>}
+                formatter={(value) => <span className="chart-legend-label">{String(value)}</span>}
+                wrapperStyle={{ fontSize: 11, maxHeight: 72, overflowY: 'auto' }}
               />
             </PieChart>
           )}
         </ResponsiveContainer>
       </div>
     </div>
-  );
+  )
 }
+
+export default ChartCard
