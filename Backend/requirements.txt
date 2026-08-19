@@ -4,3 +4,7 @@ pydantic
 langchain
 langchain-core
 langchain-openai
+langgraph
+hdbcli
+httpx
+python-dotenv

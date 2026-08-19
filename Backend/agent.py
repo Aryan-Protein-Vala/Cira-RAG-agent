@@ -22,6 +22,8 @@ except FileNotFoundError:
 MOCK_SAP = True
 SAP_ODATA_BASE_URL = "[SAP_ODATA_BASE_URL]"
 
+from sap_b1_client import execute_b1_query, SAP_B1_COMPANY_DB
+
 # OpenRouter Settings for testing
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "sk-or-dummy")
 MODEL_NAME = "openrouter/free"
@@ -32,65 +34,6 @@ llm = ChatOpenAI(
     model=MODEL_NAME,
     temperature=0.1
 )
-
-def _build_odata_query(entity: str, filters_dict: dict = None) -> str:
-    if entity not in CATALOG:
-        return f"{SAP_ODATA_BASE_URL}/{entity}?$top=50"
-
-    schema_cols = CATALOG[entity]["columns"]
-    all_cols = list(schema_cols.keys())
-    select = ",".join(all_cols)
-
-    filters = []
-    if filters_dict:
-        # Construct basic filters using schema validation
-        if "Status" in schema_cols and filters_dict.get("status"):
-            filters.append(f"Status eq '{filters_dict['status']}'")
-        if "Plant" in schema_cols and filters_dict.get("plant"):
-            filters.append(f"Plant eq '{filters_dict['plant']}'")
-        if "OrderDate" in schema_cols and filters_dict.get("year"):
-            filters.append(f"year(OrderDate) eq {filters_dict['year']}")
-
-    filter_str = f"&$filter={' and '.join(filters)}" if filters else ""
-    return f"{SAP_ODATA_BASE_URL}/{entity}?$select={select}{filter_str}&$top=50&$format=json"
-
-
-async def _execute_sap_odata(entity: str, filters_dict: dict, sap_token: str, employee_id: str) -> dict:
-    url = _build_odata_query(entity, filters_dict)
-
-    if MOCK_SAP:
-        schema = CATALOG.get(entity, {})
-        return {"ok": True, "entity": entity, "url": url, "data": schema.get("mock_data", [])}
-
-    headers = {
-        "Authorization": f"Bearer {sap_token}",
-        "Accept": "application/json",
-        "sap-client": "100",
-    }
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(url, headers=headers)
-
-        if resp.status_code == 403:
-            return {"ok": False, "error": "User is unauthorized to access this data.", "entity": entity, "status": 403}
-
-        if resp.status_code == 400:
-            # Self-correction: drop hint filters
-            all_cols = list(CATALOG.get(entity, {}).get("columns", {}).keys())
-            retry_url = f"{SAP_ODATA_BASE_URL}/{entity}?$select={','.join(all_cols)}&$top=50&$format=json"
-            resp2 = await client.get(retry_url, headers=headers)
-            if resp2.status_code == 200:
-                payload = resp2.json()
-                return {"ok": True, "entity": entity, "url": retry_url, "data": payload.get("d", {}).get("results", []), "self_corrected": True}
-            return {"ok": False, "error": f"SAP returned {resp2.status_code} after self-correction retry.", "entity": entity}
-
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            return {"ok": False, "error": f"SAP returned HTTP {exc.response.status_code}.", "entity": entity}
-
-        payload = resp.json()
-        return {"ok": True, "entity": entity, "url": url, "data": payload.get("d", {}).get("results", [])}
 
 
 def _generate_chart_payload(entity: str, data: list, user_query: str) -> dict | None:
@@ -106,22 +49,33 @@ def _generate_chart_payload(entity: str, data: list, user_query: str) -> dict | 
     elif 'area' in q_lower:
         chart_type = 'area'
 
-    if entity == "SalesOrderSet":
-        x_key = "CustomerName" if "CustomerName" in data[0] else ("Plant" if "Plant" in data[0] else "SalesOrderID")
-        y_key = "NetAmount"
-        title = f"Sales Order Value by {x_key}"
-    elif entity == "EmployeeSet":
-        x_key = "Department" if "Department" in data[0] else "JobTitle"
-        y_key = "Salary"
+    first = data[0]
+
+    # Smart mapping for SAP Business One entities
+    if entity in ("Orders", "SalesOrderSet", "Invoices"):
+        x_key = "CardName" if "CardName" in first else ("DocNum" if "DocNum" in first else list(first.keys())[0])
+        y_key = "DocTotal" if "DocTotal" in first else ("NetAmount" if "NetAmount" in first else list(first.keys())[1])
+        title = f"{entity} Value by {x_key}"
+    elif entity in ("Items",):
+        x_key = "ItemName" if "ItemName" in first else "ItemCode"
+        y_key = "QuantityOnStock" if "QuantityOnStock" in first else ("AvgPrice" if "AvgPrice" in first else list(first.keys())[1])
+        title = f"Inventory Stock: {y_key} by {x_key}"
+    elif entity in ("PurchaseOrders", "ProcurementSet"):
+        x_key = "CardName" if "CardName" in first else ("VendorName" if "VendorName" in first else list(first.keys())[0])
+        y_key = "DocTotal" if "DocTotal" in first else ("NetAmount" if "NetAmount" in first else list(first.keys())[1])
+        title = f"Procurement Value by {x_key}"
+    elif entity in ("BusinessPartners",):
+        x_key = "CardName" if "CardName" in first else ("City" if "City" in first else list(first.keys())[0])
+        y_key = "CurrentAccountBalance" if "CurrentAccountBalance" in first else list(first.keys())[1]
+        title = f"Account Balance by {x_key}"
+    elif entity in ("EmployeesInfo", "EmployeeSet"):
+        x_key = "Department" if "Department" in first else "JobTitle"
+        y_key = "Salary" if "Salary" in first else list(first.keys())[1]
         title = f"Compensation Breakdown by {x_key}"
-    elif entity == "ProcurementSet":
-        x_key = "VendorName" if "VendorName" in data[0] else ("MaterialName" if "MaterialName" in data[0] else "Plant")
-        y_key = "NetAmount" if "NetAmount" in data[0] else "Quantity"
-        title = f"Procurement Spend by {x_key}"
     else:
-        keys = list(data[0].keys())
-        x_key = next((k for k in keys if isinstance(data[0][k], str)), keys[0])
-        y_key = next((k for k in keys if isinstance(data[0][k], (int, float))), keys[-1])
+        keys = list(first.keys())
+        x_key = next((k for k in keys if isinstance(first[k], str)), keys[0])
+        y_key = next((k for k in keys if isinstance(first[k], (int, float))), keys[-1])
         title = f"{entity} Metrics"
 
     return {
@@ -131,7 +85,7 @@ def _generate_chart_payload(entity: str, data: list, user_query: str) -> dict | 
         "data": data,
         "xKey": x_key,
         "yKey": y_key,
-        "category": f"SAP {entity}"
+        "category": f"SAP B1 ({entity})"
     }
 
 
@@ -142,20 +96,30 @@ async def stream_chat_query(
     employee_id: str = "UNKNOWN"
 ) -> AsyncGenerator[str, None]:
     """
-    Real LangGraph ReAct Agent powered by OpenRouter.
-    Dynamic tools capture the per-request SAP token and stream SSE chunks.
+    Real LangGraph ReAct Agent powered by OpenRouter and connected to SAP Business One on HANA.
     """
 
-    # 1. Define tools dynamically to capture context (sap_token, employee_id)
+    # 1. Define tools dynamically to capture context
     @tool
-    async def query_sap_odata(entity: str, status: str = None, plant: str = None, year: int = None) -> dict:
+    async def query_sap_b1(entity: str, status: str = None, card_name: str = None, year: int = None) -> dict:
         """
-        Query SAP OData grounded catalog. 
-        Valid entities: SalesOrderSet, EmployeeSet, ProcurementSet.
-        Optional filters: status ('Delivered'), plant ('DE-1000'), year (2024).
+        Query SAP Business One on HANA live schema.
+        Valid SAP B1 entities:
+        - 'Orders' (Sales Orders / ORDR table)
+        - 'Invoices' (A/R Invoices / OINV table)
+        - 'Items' (Inventory stock & prices / OITM table)
+        - 'PurchaseOrders' (Procurement & vendor orders / OPOR table)
+        - 'BusinessPartners' (Customers & Vendors / OCRD table)
+        - 'EmployeesInfo' (Staff & payroll / OHEM table)
+        - Legacy aliases also supported: 'SalesOrderSet', 'EmployeeSet', 'ProcurementSet'
+        Optional filters: status ('Open'/'Closed'), card_name ('Acme'), year (2024).
         """
-        filters_dict = {"status": status, "plant": plant, "year": year}
-        return await _execute_sap_odata(entity, filters_dict, sap_token, employee_id)
+        filters = {}
+        if status:
+            filters["DocStatus"] = status
+        if card_name:
+            filters["CardName"] = card_name
+        return await execute_b1_query(entity=entity, filters=filters)
 
     @tool
     async def query_company_docs(query: str) -> str:
@@ -169,17 +133,17 @@ async def stream_chat_query(
             "- Expense reports must be submitted within 5 business days of return."
         )
 
-    tools = [query_sap_odata, query_company_docs]
+    tools = [query_sap_b1, query_company_docs]
     agent = create_react_agent(llm, tools)
 
     # 2. Build Message History with Strict Cut-to-the-Chase System Prompt
     system_prompt = (
-        f"You are CIRA, the executive SAP intelligence agent for employee {employee_id}.\n"
+        f"You are CIRA, the executive SAP Business One AI intelligence agent for company database {SAP_B1_COMPANY_DB} and user {employee_id}.\n"
         "EXECUTIVE COMMUNICATION PROTOCOL:\n"
         "1. Be extremely direct, crisp, and cut to the chase (maximum 1-2 short sentences).\n"
         "2. DO NOT generate markdown tables, ascii grids, or bullet lists of data rows, because our UI renders interactive visual tables and chart cards automatically.\n"
         "3. Simply state the high-level summary or key takeaway in one clear sentence.\n"
-        "4. Always query exact SAP entities: SalesOrderSet, EmployeeSet, ProcurementSet."
+        "4. Always query exact SAP B1 entities: Orders, Items, Invoices, PurchaseOrders, BusinessPartners, EmployeesInfo."
     )
     messages = [SystemMessage(content=system_prompt)]
     for msg in history:
@@ -204,8 +168,8 @@ async def stream_chat_query(
             # Announce tool starts
             elif kind == "on_tool_start":
                 tool_name = event["name"]
-                if tool_name == "query_sap_odata":
-                    yield f"data: {json.dumps({'type': 'source', 'name': 'SAP OData API'})}\n\n"
+                if tool_name in ("query_sap_b1", "query_sap_odata"):
+                    yield f"data: {json.dumps({'type': 'source', 'name': 'SAP Business One (HANA)'})}\n\n"
                 elif tool_name == "query_company_docs":
                     yield f"data: {json.dumps({'type': 'source', 'name': 'Company Knowledge Base'})}\n\n"
 
@@ -214,7 +178,7 @@ async def stream_chat_query(
                 tool_name = event["name"]
                 output = event["data"].get("output", "")
                 
-                if tool_name == "query_sap_odata" and isinstance(output, dict) and output.get("ok"):
+                if tool_name in ("query_sap_b1", "query_sap_odata") and isinstance(output, dict) and output.get("ok"):
                     raw_data = output.get("data", [])
                     entity_name = output.get("entity", "SAP Data")
                     
