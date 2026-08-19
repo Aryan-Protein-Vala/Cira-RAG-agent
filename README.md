@@ -120,7 +120,7 @@ Everything lives in `Backend/.env` (see `Backend/.env.example`). Highlights:
 | Variable | Default | Notes |
 |---|---|---|
 | `CIRA_DATA_SOURCE` | `auto` | `auto` → HANA → Service Layer → sandbox. Force with `hana`, `service`, `simulator`. |
-| `HANA_HOST` / `HANA_PORT` | `20.204.5.237` / `30015` | For a single-tenant B1 install the SQL port is usually `3<instance>15` (30015), **not** 30013 (SYSTEMDB). |
+| `HANA_HOST` / `HANA_PORT` | `20.204.5.237` / `30013` | 30013 is the instance-00 system port. If the company schema is not visible, try the tenant SQL port `3<instance>15` (e.g. 30015). |
 | `HANA_USER` / `HANA_PASSWORD` | – | Use a **read-only** technical user. |
 | `HANA_SCHEMA` | `CIRA_DEMO_NEW` | Company DB. If it doesn’t exist, CIRA auto-detects schemas containing `OADM` and logs a warning. |
 | `SAP_B1_*` | – | Service Layer fallback (port 50000). |
