@@ -45,6 +45,8 @@ async def generate_chat_response(
     """
     full_text = ""
     tabular_data = None
+    entity_name = None
+    chart_payload = None
 
     # ── Pre-stream: fetch history + save user message ─────────────────────────
     async with create_short_lived_session() as db:
@@ -82,22 +84,29 @@ async def generate_chat_response(
         if chunk.startswith("data: "):
             try:
                 data = json.loads(chunk[6:])
-                if data["type"] == "chunk":
-                    full_text += data["text"]
-                elif data["type"] == "tabular":
-                    tabular_data = data["data"]
-            except json.JSONDecodeError:
+                if isinstance(data, dict):
+                    msg_type = data.get("type")
+                    if msg_type == "chunk":
+                        full_text += str(data.get("text", ""))
+                    elif msg_type == "tabular":
+                        tabular_data = data.get("data")
+                        entity_name = data.get("entity")
+                    elif msg_type == "chart":
+                        chart_payload = data
+            except Exception:
                 pass
 
-    # ── Post-stream: persist assistant response ───────────────────────────────
+    # ── Post-stream: persist assistant response with entity & chart ───────────
     async with create_short_lived_session() as db:
         db.add(ChatMessage(
             session_id=session_id,
             employee_id=employee_id,
             role='assistant',
             content=full_text.strip(),
-            msg_type='tabular' if tabular_data else 'text',
-            data_payload=json.dumps(tabular_data) if tabular_data else None
+            msg_type='chart' if chart_payload else ('tabular' if tabular_data else 'text'),
+            data_payload=json.dumps(tabular_data) if tabular_data else None,
+            entity=entity_name,
+            chart_payload=json.dumps(chart_payload) if chart_payload else None
         ))
         await db.commit()
 
@@ -156,7 +165,9 @@ async def get_history(
             "role": m.role,
             "content": m.content,
             "type": m.msg_type,
-            "data": json.loads(m.data_payload) if m.data_payload else None
+            "data": json.loads(m.data_payload) if m.data_payload else None,
+            "entity": getattr(m, "entity", None),
+            "chart": json.loads(m.chart_payload) if getattr(m, "chart_payload", None) else None
         } for m in history
     ]}
 

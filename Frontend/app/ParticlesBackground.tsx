@@ -62,6 +62,7 @@ export default function ParticlesBackground() {
         let dx = mouse.x - this.x;
         let dy = mouse.y - this.y;
         let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < 0.001) distance = 0.001;
         let forceDirectionX = dx / distance;
         let forceDirectionY = dy / distance;
         let maxDistance = 180;

@@ -37,7 +37,7 @@ llm = ChatOpenAI(
 
 
 def _generate_chart_payload(entity: str, data: list, user_query: str) -> dict | None:
-    if not data or not isinstance(data, list) or len(data) == 0:
+    if not data or not isinstance(data, list) or len(data) == 0 or not isinstance(data[0], dict):
         return None
     
     q_lower = user_query.lower()
@@ -50,32 +50,34 @@ def _generate_chart_payload(entity: str, data: list, user_query: str) -> dict | 
         chart_type = 'area'
 
     first = data[0]
+    keys = list(first.keys())
+    if not keys:
+        return None
 
     # Smart mapping for SAP Business One entities
     if entity in ("Orders", "SalesOrderSet", "Invoices"):
-        x_key = "CardName" if "CardName" in first else ("DocNum" if "DocNum" in first else list(first.keys())[0])
-        y_key = "DocTotal" if "DocTotal" in first else ("NetAmount" if "NetAmount" in first else list(first.keys())[1])
+        x_key = "CardName" if "CardName" in first else ("DocNum" if "DocNum" in first else keys[0])
+        y_key = "DocTotal" if "DocTotal" in first else ("NetAmount" if "NetAmount" in first else (keys[1] if len(keys) > 1 else keys[0]))
         title = f"{entity} Value by {x_key}"
     elif entity in ("Items",):
         x_key = "ItemName" if "ItemName" in first else "ItemCode"
-        y_key = "QuantityOnStock" if "QuantityOnStock" in first else ("AvgPrice" if "AvgPrice" in first else list(first.keys())[1])
+        y_key = "QuantityOnStock" if "QuantityOnStock" in first else ("AvgPrice" if "AvgPrice" in first else (keys[1] if len(keys) > 1 else keys[0]))
         title = f"Inventory Stock: {y_key} by {x_key}"
     elif entity in ("PurchaseOrders", "ProcurementSet"):
-        x_key = "CardName" if "CardName" in first else ("VendorName" if "VendorName" in first else list(first.keys())[0])
-        y_key = "DocTotal" if "DocTotal" in first else ("NetAmount" if "NetAmount" in first else list(first.keys())[1])
+        x_key = "CardName" if "CardName" in first else ("VendorName" if "VendorName" in first else keys[0])
+        y_key = "DocTotal" if "DocTotal" in first else ("NetAmount" if "NetAmount" in first else (keys[1] if len(keys) > 1 else keys[0]))
         title = f"Procurement Value by {x_key}"
     elif entity in ("BusinessPartners",):
-        x_key = "CardName" if "CardName" in first else ("City" if "City" in first else list(first.keys())[0])
-        y_key = "CurrentAccountBalance" if "CurrentAccountBalance" in first else list(first.keys())[1]
+        x_key = "CardName" if "CardName" in first else ("City" if "City" in first else keys[0])
+        y_key = "CurrentAccountBalance" if "CurrentAccountBalance" in first else (keys[1] if len(keys) > 1 else keys[0])
         title = f"Account Balance by {x_key}"
     elif entity in ("EmployeesInfo", "EmployeeSet"):
         x_key = "Department" if "Department" in first else "JobTitle"
-        y_key = "Salary" if "Salary" in first else list(first.keys())[1]
+        y_key = "Salary" if "Salary" in first else (keys[1] if len(keys) > 1 else keys[0])
         title = f"Compensation Breakdown by {x_key}"
     else:
-        keys = list(first.keys())
         x_key = next((k for k in keys if isinstance(first[k], str)), keys[0])
-        y_key = next((k for k in keys if isinstance(first[k], (int, float))), keys[-1])
+        y_key = next((k for k in keys if isinstance(first[k], (int, float))), (keys[1] if len(keys) > 1 else keys[0]))
         title = f"{entity} Metrics"
 
     return {
@@ -136,14 +138,14 @@ async def stream_chat_query(
     tools = [query_sap_b1, query_company_docs]
     agent = create_react_agent(llm, tools)
 
-    # 2. Build Message History with Strict Cut-to-the-Chase System Prompt
+    # 2. Build Message History with Proactive Tool Execution System Prompt
     system_prompt = (
-        f"You are CIRA, the executive SAP Business One AI intelligence agent for company database {SAP_B1_COMPANY_DB} and user {employee_id}.\n"
-        "EXECUTIVE COMMUNICATION PROTOCOL:\n"
-        "1. Be extremely direct, crisp, and cut to the chase (maximum 1-2 short sentences).\n"
-        "2. DO NOT generate markdown tables, ascii grids, or bullet lists of data rows, because our UI renders interactive visual tables and chart cards automatically.\n"
-        "3. Simply state the high-level summary or key takeaway in one clear sentence.\n"
-        "4. Always query exact SAP B1 entities: Orders, Items, Invoices, PurchaseOrders, BusinessPartners, EmployeesInfo."
+        f"You are CIRA, the executive SAP Business One AI intelligence agent for company database '{SAP_B1_COMPANY_DB}' and user '{employee_id}'.\n"
+        "CORE PROTOCOL:\n"
+        "1. When the user asks for data, reports, tables, or charts (e.g. sales, orders, invoices, inventory items, vendors, employees), ALWAYS invoke the 'query_sap_b1' tool with the matching entity.\n"
+        "2. Valid entities: Orders, Items, Invoices, PurchaseOrders, BusinessPartners, EmployeesInfo.\n"
+        "3. When you query data, the system automatically renders interactive visual tables (with Excel export) and glowing chart components for the user.\n"
+        "4. In your text answer, give a direct, concise 1-2 sentence executive summary of the key metrics. Never refuse to provide tables or charts."
     )
     messages = [SystemMessage(content=system_prompt)]
     for msg in history:

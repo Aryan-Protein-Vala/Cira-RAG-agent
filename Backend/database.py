@@ -41,8 +41,10 @@ class ChatMessage(Base):
     employee_id = Column(String, index=True)  # Fix 2: IDOR — messages are now owned by an employee
     role = Column(String)           # 'user' or 'assistant'
     content = Column(Text)
-    msg_type = Column(String, nullable=True)    # 'text' or 'tabular'
-    data_payload = Column(Text, nullable=True)  # json dump of data if tabular
+    msg_type = Column(String, nullable=True)    # 'text', 'tabular', or 'chart'
+    data_payload = Column(Text, nullable=True)  # json dump of tabular data
+    entity = Column(String, nullable=True)      # entity name e.g. Orders, Items
+    chart_payload = Column(Text, nullable=True) # json dump of chart config
 
 
 async def init_db():

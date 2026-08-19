@@ -44,9 +44,10 @@ def decode_mock_token(token: str) -> dict:
         padded = token + "=" * (-len(token) % 4)
         decoded = base64.b64decode(padded).decode("utf-8")
         payload = json.loads(decoded)
-        # Validate expiry (mock tokens are valid for 8 hours)
-        if time.time() - payload.get("iat", 0) > 28800:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+        iat = payload.get("iat")
+        if iat is not None and isinstance(iat, (int, float)):
+            if time.time() - iat > 86400:  # 24 hours
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
         return payload
     except (ValueError, json.JSONDecodeError):
         raise HTTPException(

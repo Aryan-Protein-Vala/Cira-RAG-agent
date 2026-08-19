@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm'
 import { exportToExcel } from '@/lib/export'
 import { ChartCard, ChartPayload } from './ChartCard'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 const fallbackDataPayload = { 
   report: 'Q3 Procurement Variance', 
   period: 'July 01 – September 30, 2024', 
@@ -110,8 +112,23 @@ function Login({ onLogin, theme, onToggle }: { onLogin: (id: string, token: stri
 }
 
 function DataCard({ payload, entity }: { payload?: any; entity?: string }) { 
-  const rawData: any[] = Array.isArray(payload) && payload.length > 0 ? payload : fallbackDataPayload.rows;
-  const headers = Object.keys(rawData[0]);
+  if (Array.isArray(payload) && payload.length === 0) {
+    return (
+      <div className="data-card">
+        <div className="data-card-head">
+          <div>
+            <span className="data-label"><BarChart3 size={13} /> STRUCTURED SAP RESULT</span>
+            <strong>{entity ?? 'SAP Data'}</strong>
+          </div>
+          <span className="row-count">0 records</span>
+        </div>
+        <p className="data-period" style={{ marginTop: '12px', marginBottom: 0 }}>No records found matching query criteria.</p>
+      </div>
+    );
+  }
+
+  const rawData: any[] = Array.isArray(payload) ? payload : (payload ? [payload] : fallbackDataPayload.rows);
+  const headers = rawData.length > 0 && typeof rawData[0] === 'object' && rawData[0] !== null ? Object.keys(rawData[0]) : [];
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
@@ -140,13 +157,13 @@ function DataCard({ payload, entity }: { payload?: any; entity?: string }) {
   const displayRows = showAll ? filteredData : filteredData.slice(0, 4);
 
   const copy = async () => {
-    await navigator.clipboard?.writeText(JSON.stringify(rawData, null, 2));
+    await navigator.clipboard?.writeText(JSON.stringify(filteredData, null, 2));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };
 
   const downloadJSON = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(filteredData, null, 2)], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
     link.download = `${entity ?? 'sap'}_export.json`;
@@ -306,7 +323,7 @@ function Sidebar({
     if (title && title !== oldTitle) {
       setSessions(sessions.map((s) => s.id === id ? { ...s, title } : s));
       try {
-        const res = await fetch(`http://localhost:8000/session/${id}`, {
+        const res = await fetch(`${API_BASE}/session/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
           body: JSON.stringify({ title })
@@ -368,9 +385,9 @@ function Sidebar({
           aria-label="Open user profile" 
           type="button"
         >
-          AM
+          {(employeeId || 'AD').slice(0, 2).toUpperCase()}
         </button>
-        <div className="profile-info"><strong>Alex Morgan</strong><span>EMP-20481</span></div>
+        <div className="profile-info"><strong>{employeeId.toUpperCase().startsWith('ADMIN') ? 'System Admin' : employeeId}</strong><span>{employeeId || 'EMP-20481'}</span></div>
         <button className="icon-button logout-btn" onClick={(e) => { e.stopPropagation(); onLogout(); }} aria-label="Log out"><LogOut size={16} /></button>
       </div>
     </aside>
@@ -393,8 +410,8 @@ export default function Page() {
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [profileName, setProfileName] = useState('Alex Morgan');
-  const [profileDept, setProfileDept] = useState('Sales & Logistics');
+  const [profileName, setProfileName] = useState('System Admin');
+  const [profileDept, setProfileDept] = useState('Enterprise Operations');
   const [profileRole, setProfileRole] = useState('Senior Manager');
   const autoScrollRef = useRef(true);
   const fileRef = useRef<HTMLInputElement>(null); 
@@ -414,7 +431,7 @@ export default function Page() {
     setSessionToDelete(null);
     if (activeId === session.id) selectChat('new', 'New conversation');
     try {
-      const res = await fetch(`http://localhost:8000/session/${session.id}`, {
+      const res = await fetch(`${API_BASE}/session/${session.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       });
@@ -431,18 +448,21 @@ export default function Page() {
 
   useEffect(() => {
     const savedToken = localStorage.getItem('cira-token');
-    const savedId = localStorage.getItem('cira-emp-id');
-    if (savedToken && savedId) {
+    const savedEmpId = localStorage.getItem('cira-emp-id');
+    if (savedToken && savedEmpId) {
+      setEmployeeId(savedEmpId);
+      setProfileName(savedEmpId.toUpperCase().startsWith('ADMIN') ? 'System Admin' : savedEmpId);
       setSessionToken(savedToken);
-      setEmployeeId(savedId);
       setLoggedIn(true);
     }
+    const savedTheme = localStorage.getItem('cira-theme') as 'light' | 'dark' | null;
+    if (savedTheme) setTheme(savedTheme);
     setIsAuthLoaded(true);
   }, []);
 
   useEffect(() => { 
     if (loggedIn && sessionToken) {
-      fetch('http://localhost:8000/sessions', {
+      fetch(`${API_BASE}/sessions`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       })
         .then(res => res.json())
@@ -500,7 +520,7 @@ export default function Page() {
       setSessions(current => [{ id: currentSessionId, title: chatTitle, date: 'Today' }, ...current]);
       
       // Fire background title generation
-      fetch('http://localhost:8000/generate_title', {
+      fetch(`${API_BASE}/generate_title`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
         body: JSON.stringify({ prompt: value })
@@ -508,7 +528,7 @@ export default function Page() {
       .then(res => res.json())
       .then(data => {
         if (data.title) {
-          fetch(`http://localhost:8000/session/${currentSessionId}`, {
+          fetch(`${API_BASE}/session/${currentSessionId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
             body: JSON.stringify({ title: data.title })
@@ -541,7 +561,7 @@ export default function Page() {
     };
 
     try {
-      const res = await fetch('http://localhost:8000/chat', {
+      const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -580,10 +600,10 @@ export default function Page() {
                   ? { ...m, chart: parsed }
                   : m
               ));
-            } else if (parsed.type === 'source') {
+            } else if (parsed.type === 'source' && parsed.name) {
               setMessages((current) => current.map((m: any) =>
                 m._streamingId === streamingId
-                  ? { ...m, sources: Array.from(new Set([...(m.sources || []), parsed.name])) }
+                  ? { ...m, sources: Array.from(new Set([...(m.sources || []), String(parsed.name)])) }
                   : m
               ));
             }
@@ -632,12 +652,18 @@ export default function Page() {
     }
 
     try {
-      const res = await fetch(`http://localhost:8000/history/${encodeURIComponent(id)}`, {
+      const res = await fetch(`${API_BASE}/history/${encodeURIComponent(id)}`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` },
       });
       const data = await res.json();
       if (data.messages && data.messages.length > 0) {
-        setMessages(data.messages.map((m: any) => ({ role: m.role, content: m.content, data: m.data })));
+        setMessages(data.messages.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          data: m.data,
+          entity: m.entity,
+          chart: m.chart
+        })));
       } else {
         setMessages([{ role: 'assistant', content: `I'm ready to continue with "${title}". What would you like to know?` }]);
       }
@@ -650,6 +676,7 @@ export default function Page() {
     localStorage.setItem('cira-emp-id', id);
     localStorage.setItem('cira-token', token);
     setEmployeeId(id);
+    setProfileName(id.toUpperCase().startsWith('ADMIN') ? 'System Admin' : id);
     setSessionToken(token);
     setLoggedIn(true);
   };

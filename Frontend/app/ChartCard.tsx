@@ -58,7 +58,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
         }}>
           <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.7)' }}>{label}</p>
           <p style={{ margin: 0, fontWeight: 700, color: '#38bdf8' }}>
-            {yKey}: {Number(tooltipPayload[0].value).toLocaleString()}
+            {yKey}: {typeof tooltipPayload[0].value === 'number' && !isNaN(tooltipPayload[0].value) ? Number(tooltipPayload[0].value).toLocaleString() : String(tooltipPayload[0].value ?? '')}
           </p>
         </div>
       );

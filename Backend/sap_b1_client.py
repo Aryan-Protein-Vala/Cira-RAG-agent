@@ -58,6 +58,8 @@ async def get_b1_session() -> dict | None:
         return None
 
 
+import asyncio
+
 async def execute_b1_query(entity: str, filters: dict = None, select_fields: list = None, top: int = 50) -> dict:
     """
     Query SAP Business One Service Layer entity set (e.g. Orders, Invoices, Items, BusinessPartners).
@@ -106,8 +108,8 @@ async def execute_b1_query(entity: str, filters: dict = None, select_fields: lis
         except Exception as exc:
             print(f"[SAP B1] Service Layer query failed: {exc}")
 
-    # 2. Attempt Direct HANA DB Query (hdbcli)
-    hana_result = query_hana_db(entity, filters, select_fields, top)
+    # 2. Attempt Direct HANA DB Query offloaded to worker thread (Non-blocking)
+    hana_result = await asyncio.to_thread(query_hana_db, entity, filters, select_fields, top)
     if hana_result.get("ok"):
         return hana_result
 
@@ -117,7 +119,8 @@ async def execute_b1_query(entity: str, filters: dict = None, select_fields: lis
 
 
 def query_hana_db(entity: str, filters: dict = None, select_fields: list = None, top: int = 50) -> dict:
-    """Direct SQL query via official SAP HANA hdbcli."""
+    """Direct SQL query via official SAP HANA hdbcli with safe parameterization and connection closing."""
+    conn = None
     try:
         from hdbcli import dbapi
         conn = dbapi.connect(
@@ -125,11 +128,12 @@ def query_hana_db(entity: str, filters: dict = None, select_fields: list = None,
             port=HANA_PORT,
             user=HANA_USER,
             password=HANA_PASSWORD,
-            currentSchema=SAP_B1_COMPANY_DB
+            currentSchema=SAP_B1_COMPANY_DB,
+            connectTimeout=4000
         )
         cursor = conn.cursor()
 
-        # Map B1 Service Layer Entity to SQL Table Name
+        # Whitelisted Table Mapping for SAP B1
         TABLE_MAP = {
             "Orders": "ORDR",
             "SalesOrderSet": "ORDR",
@@ -141,27 +145,25 @@ def query_hana_db(entity: str, filters: dict = None, select_fields: list = None,
             "EmployeesInfo": "OHEM",
             "EmployeeSet": "OHEM"
         }
-        table_name = TABLE_MAP.get(entity, entity)
+        table_name = TABLE_MAP.get(entity, "ORDR")
 
-        cols = ", ".join(select_fields) if select_fields else "*"
+        cols = ", ".join([f'"{c}"' for c in select_fields]) if select_fields else "*"
+        params = []
         where_clause = ""
         if filters:
             conditions = []
             for k, v in filters.items():
                 if v is not None:
-                    if isinstance(v, str):
-                        conditions.append(f'"{k}" = \'{v}\'')
-                    else:
-                        conditions.append(f'"{k}" = {v}')
+                    conditions.append(f'"{k}" = ?')
+                    params.append(v)
             if conditions:
                 where_clause = "WHERE " + " AND ".join(conditions)
 
-        sql = f'SELECT TOP {top} {cols} FROM "{SAP_B1_COMPANY_DB}"."{table_name}" {where_clause};'
-        cursor.execute(sql)
+        sql = f'SELECT TOP {int(top)} {cols} FROM "{SAP_B1_COMPANY_DB}"."{table_name}" {where_clause};'
+        cursor.execute(sql, params)
 
-        columns = [desc[0] for desc in cursor.description]
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        conn.close()
 
         return {
             "ok": True,
@@ -173,6 +175,12 @@ def query_hana_db(entity: str, filters: dict = None, select_fields: list = None,
     except Exception as exc:
         print(f"[SAP HANA] Direct DB query error: {exc}")
         return {"ok": False, "error": str(exc)}
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _get_mock_fallback(entity: str) -> dict:
