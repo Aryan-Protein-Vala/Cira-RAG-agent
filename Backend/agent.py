@@ -563,14 +563,40 @@ async def stream_chat_query(
         log.exception("agent stream failed")
         message = str(exc)
         friendly = _friendly_error(message)
+        # The data tools work without the LLM. When the model provider itself
+        # is unreachable / rejects us / rate-limits us before anything was
+        # streamed, degrade to the deterministic planner instead of a dead end.
+        if not bus.all and not emitted_any_text and _looks_like_provider_failure(message):
+            yield sse({
+                "type": "status",
+                "text": f"AI model unavailable ({friendly.replace('⚠ ', '')[:120]}) — "
+                       "answering with the built-in planner.",
+            })
+            async for chunk in _deterministic_stream(query, bus, employee_id):
+                yield chunk
+            yield sse({"type": "done"})
+            return
         yield sse({"type": "error", "text": friendly, "detail": message[:500]})
         yield sse({"type": "chunk", "text": friendly})
 
     yield sse({"type": "done"})
 
 
+def _looks_like_provider_failure(message: str) -> bool:
+    low = message.lower()
+    markers = (
+        "connection", "connect error", "api key", "unauthor", "invalid api",
+        "rate limit", "429", "timeout", "timed out", "not found", "404",
+        "model", "no such", "dns", "refused", "resolve",
+    )
+    return any(m in low for m in markers)
+
+
 def _friendly_error(message: str) -> str:
     low = message.lower()
+    if "connection" in low or "connect error" in low or "refused" in low or "resolve" in low or "dns" in low:
+        return ("⚠ Cannot reach the AI provider (OpenRouter). Check that this machine "
+                "has internet access to openrouter.ai.")
     if "api key" in low or "401" in low or "unauthor" in low:
         return ("⚠ The AI model rejected the request — check OPENROUTER_API_KEY in "
                 "Backend/.env.")

@@ -153,7 +153,12 @@ async def health():
 
 
 @app.get("/sap/health")
-async def sap_health():
+async def sap_health(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    # Requires a valid session token: this response contains the SAP topology
+    # (host, port, schema, technical user) and must not be world-readable.
+    validate_and_extract(credentials)
     return await sap.health()
 
 

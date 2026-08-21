@@ -57,6 +57,10 @@ export async function exportToExcel(data: Row[], filename = 'sap_export.xlsx') {
   const columns = collectColumns(flat)
 
   try {
+    // `write-excel-file/browser` does NOT take a `fileName` option — it returns
+    // { toBlob, toFile } and the download is triggered via `toFile(name)`.
+    // Passing `fileName` in the sheet options made `next build` fail type-check
+    // (and would silently no-op the download at runtime).
     const writeXlsxFile = (await import('write-excel-file/browser')).default
     const sheetColumns = columns.map((column) => {
       const sample = flat.find((row) => row[column] !== '' && row[column] !== undefined)?.[column]
@@ -76,7 +80,8 @@ export async function exportToExcel(data: Row[], filename = 'sap_export.xlsx') {
         },
       }
     })
-    await writeXlsxFile(flat, { columns: sheetColumns, sheet: 'SAP Data', fileName: filename })
+    const xlsxFile = writeXlsxFile(flat, { columns: sheetColumns, sheet: 'SAP Data' })
+    await xlsxFile.toFile(filename)
   } catch (error) {
     // Never leave the user without their data: fall back to CSV.
     console.error('XLSX export failed, falling back to CSV', error)

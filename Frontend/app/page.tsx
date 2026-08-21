@@ -941,8 +941,14 @@ export default function Page() {
         }))
       }
     } finally {
-      setIsThinking(false)
-      abortControllerRef.current = null
+      // Only the *current* request may clean up. An aborted older request's
+      // finally used to run after a newer request had started, wiping the new
+      // AbortController (Stop button dead) and flipping isThinking to false
+      // while the new stream was still running (double-send possible).
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null
+        setIsThinking(false)
+      }
     }
   }
 
