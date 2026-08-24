@@ -153,7 +153,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" angle={data.length > 8 ? -20 : 0} textAnchor={data.length > 8 ? 'end' : 'middle'} height={data.length > 8 ? 60 : 30} />
+              <XAxis dataKey={xKey} {...axisProps} dy={8} tick={data.length > 8 ? false : undefined} height={data.length > 8 ? 10 : 30} />
               <YAxis {...axisProps} tickFormatter={compact} width={64} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--secondary)' }} />
               <Bar dataKey={yKey} fill="url(#ciraBarGradient)" radius={[8, 8, 0, 0]} maxBarSize={64} />
@@ -161,7 +161,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           ) : activeType === 'line' ? (
             <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
+              <XAxis dataKey={xKey} {...axisProps} dy={8} tick={data.length > 8 ? false : undefined} height={data.length > 8 ? 10 : 30} />
               <YAxis {...axisProps} tickFormatter={compact} width={64} />
               <Tooltip content={<CustomTooltip />} />
               <Line
@@ -182,7 +182,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
+              <XAxis dataKey={xKey} {...axisProps} dy={8} tick={data.length > 8 ? false : undefined} height={data.length > 8 ? 10 : 30} />
               <YAxis {...axisProps} tickFormatter={compact} width={64} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey={yKey} stroke="#a78bfa" strokeWidth={2} fill="url(#ciraAreaGradient)" />
