@@ -16,16 +16,13 @@ import {
   LogOut,
   Menu,
   MessageSquare,
-  Moon,
   MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
   Search,
   ShieldCheck,
-  Sparkles,
   Square,
-  Sun,
   Trash2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -93,26 +90,15 @@ function BrandMark() {
   )
 }
 
-function ThemeToggle({ theme, onToggle }: { theme: 'light' | 'dark'; onToggle: () => void }) {
-  return (
-    <button className="theme-toggle" onClick={onToggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-      {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-      <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-    </button>
-  )
-}
+/* ThemeToggle removed — light-only theme */
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Login                                                                      */
 /* ────────────────────────────────────────────────────────────────────────── */
 function Login({
   onLogin,
-  theme,
-  onToggle,
 }: {
   onLogin: (user: { employee_id: string; name: string }, token: string) => void
-  theme: 'light' | 'dark'
-  onToggle: () => void
 }) {
   const [employee, setEmployee] = useState('')
   const [password, setPassword] = useState('')
@@ -159,7 +145,6 @@ function Login({
             <BrandMark />
             <span>CIRA</span>
           </div>
-          <ThemeToggle theme={theme} onToggle={onToggle} />
         </div>
         <section className="login-card" aria-labelledby="login-title">
           <div className="login-brand">
@@ -668,7 +653,7 @@ export default function Page() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  /* theme removed — light only */
   const [isThinking, setIsThinking] = useState(false)
   const [toasts, setToasts] = useState<ToastType[]>([])
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
@@ -736,8 +721,6 @@ export default function Page() {
     setProfileName(localStorage.getItem('cira-profile-name') || savedEmpId || '')
     setProfileDept(localStorage.getItem('cira-profile-dept') || 'Enterprise Operations')
     setProfileRole(localStorage.getItem('cira-profile-role') || 'Senior Manager')
-    const savedTheme = localStorage.getItem('cira-theme') as 'light' | 'dark' | null
-    if (savedTheme) setTheme(savedTheme)
     setIsAuthLoaded(true)
   }, [])
 
@@ -769,10 +752,7 @@ export default function Page() {
     }
   }, [loggedIn, sessionToken, api])
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    window.localStorage.setItem('cira-theme', theme)
-  }, [theme])
+  /* Dark mode removed — always light */
 
   const handleScroll = () => {
     if (!scrollRef.current) return
@@ -786,7 +766,7 @@ export default function Page() {
     }
   }, [messages, isThinking])
 
-  const toggleTheme = () => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))
+  /* toggleTheme removed — always light */
 
   const removeSession = async (session: Session) => {
     setSessions((current) => current.filter((s) => s.id !== session.id))
@@ -1015,7 +995,7 @@ export default function Page() {
   }, [profileName, employeeId])
 
   if (!isAuthLoaded) return null
-  if (!loggedIn) return <Login onLogin={handleLogin} theme={theme} onToggle={toggleTheme} />
+  if (!loggedIn) return <Login onLogin={handleLogin} />
 
   return (
     <>
@@ -1054,7 +1034,7 @@ export default function Page() {
                   <Database size={12} /> {backendInfo.simulated ? 'Sandbox data' : 'Live SAP'} · {backendInfo.schema}
                 </span>
               )}
-              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+              {/* ThemeToggle removed — light only */}
               <button className="secondary-button" onClick={() => selectChat('new', 'New conversation')}>
                 <Plus size={16} /> New chat
               </button>
@@ -1066,7 +1046,7 @@ export default function Page() {
               {messages.length === 0 && (
                 <div className="chat-intro">
                   <div className="intro-icon">
-                    <Sparkles size={20} />
+                    <BrandMark />
                   </div>
                   <div>
                     <h1>{greeting}</h1>
@@ -1121,9 +1101,14 @@ export default function Page() {
                         ) : (
                           message.content
                         )}
-                        {message.chart && <ChartCard payload={message.chart} />}
-                        {message.data !== undefined && message.data !== null && (
-                          <DataCard payload={message.data} entity={message.entity} meta={message.meta} />
+                        {/* Side-by-side chart + data card row */}
+                        {(message.chart || (message.data !== undefined && message.data !== null)) && (
+                          <div className="data-chart-row">
+                            {message.chart && <ChartCard payload={message.chart} />}
+                            {message.data !== undefined && message.data !== null && (
+                              <DataCard payload={message.data} entity={message.entity} meta={message.meta} />
+                            )}
+                          </div>
                         )}
                         {message.sources && message.sources.length > 0 && (
                           <div className="source-capsules">

@@ -34,7 +34,7 @@ export interface ChartPayload {
   sourceRows?: number
 }
 
-const COLORS = ['#38bdf8', '#818cf8', '#c084fc', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#f472b6']
+const COLORS = ['#c4b5fd', '#f9a8d4', '#fbbf24', '#86efac', '#93c5fd', '#fda4af', '#a5b4fc', '#fdba74']
 
 const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [
   { id: 'bar', label: 'Bar', icon: <BarChart3 size={13} /> },
@@ -148,8 +148,8 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
               <defs>
                 <linearGradient id="ciraBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="#818cf8" stopOpacity={0.45} />
+                  <stop offset="0%" stopColor="#c4b5fd" stopOpacity={0.9} />
+                  <stop offset="100%" stopColor="#f9a8d4" stopOpacity={0.45} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
@@ -167,9 +167,9 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
               <Line
                 type="monotone"
                 dataKey={yKey}
-                stroke="#38bdf8"
+                stroke="#a78bfa"
                 strokeWidth={3}
-                dot={data.length <= 30 ? { fill: '#38bdf8', r: 3 } : false}
+                dot={data.length <= 30 ? { fill: '#a78bfa', r: 3 } : false}
                 activeDot={{ r: 6 }}
               />
             </LineChart>
@@ -177,15 +177,15 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             <AreaChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
               <defs>
                 <linearGradient id="ciraAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.7} />
-                  <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.05} />
+                  <stop offset="0%" stopColor="#c4b5fd" stopOpacity={0.6} />
+                  <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0.05} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
               <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
               <YAxis {...axisProps} tickFormatter={compact} width={64} />
               <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey={yKey} stroke="#38bdf8" strokeWidth={2} fill="url(#ciraAreaGradient)" />
+              <Area type="monotone" dataKey={yKey} stroke="#a78bfa" strokeWidth={2} fill="url(#ciraAreaGradient)" />
             </AreaChart>
           ) : (
             <PieChart>
