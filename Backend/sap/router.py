@@ -23,6 +23,7 @@ import config
 from . import entities
 from .base import DataBackend
 from .hana_backend import HanaBackend
+from .mssql_backend import MssqlBackend
 from .query_spec import Aggregate, ColumnResolver, QuerySpec, build_select, spec_from_payload
 from .serialize import rows_to_jsonable
 from .service_layer import ServiceLayerBackend
@@ -53,16 +54,20 @@ class _Selector:
     def _make(kind: str) -> DataBackend:
         if kind == "hana":
             return HanaBackend()
+        if kind == "mssql":
+            return MssqlBackend()
         if kind in ("service", "service_layer", "odata"):
             return ServiceLayerBackend()
         return SimulatorBackend()
 
     def _candidates(self) -> list[str]:
         mode = (config.DATA_SOURCE or "auto").lower()
-        if mode in ("hana", "service", "service_layer", "odata", "simulator", "sim", "mock"):
+        if mode in ("hana", "mssql", "service", "service_layer", "odata", "simulator", "sim", "mock"):
             return [{"sim": "simulator", "mock": "simulator"}.get(mode, mode)]
         order = []
         tenant = config.CURRENT_TENANT.get() or {}
+        if tenant.get("MSSQL_PASSWORD", config.MSSQL_PASSWORD):
+            order.append("mssql")
         if tenant.get("HANA_PASSWORD", config.HANA_PASSWORD):
             order.append("hana")
         if tenant.get("SAP_B1_PASSWORD", config.SAP_B1_PASSWORD):
