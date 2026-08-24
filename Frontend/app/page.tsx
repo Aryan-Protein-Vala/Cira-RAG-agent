@@ -1085,23 +1085,36 @@ export default function Page() {
                         {message.status && <p className="status-line">{message.status}</p>}
                       </div>
                     ) : (
-                      <div className="bubble">
-                        {message.role === 'assistant' ? (
-                          <>
-                            {message.status && <p className="status-line">{message.status}</p>}
-                            {message.content && (
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-                            )}
-                            {message.error && (
-                              <p className="error-line">
-                                <AlertTriangle size={14} /> {message.error}
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          message.content
-                        )}
-                        {/* Side-by-side chart + data card row */}
+                      <>
+                        <div className="bubble">
+                          {message.role === 'assistant' ? (
+                            <>
+                              {message.status && <p className="status-line">{message.status}</p>}
+                              {message.content && (
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                              )}
+                              {message.error && (
+                                <p className="error-line">
+                                  <AlertTriangle size={14} /> {message.error}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            message.content
+                          )}
+                          
+                          {message.sources && message.sources.length > 0 && (
+                            <div className="source-capsules">
+                              {message.sources.map((src, idx) => (
+                                <div key={`${src}-${idx}`} className="source-capsule">
+                                  <Database size={12} /> {src}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Side-by-side chart + data card row OUTSIDE the text bubble */}
                         {(message.chart || (message.data !== undefined && message.data !== null)) && (
                           <div className="data-chart-row">
                             {message.chart && <ChartCard payload={message.chart} />}
@@ -1110,16 +1123,7 @@ export default function Page() {
                             )}
                           </div>
                         )}
-                        {message.sources && message.sources.length > 0 && (
-                          <div className="source-capsules">
-                            {message.sources.map((src, idx) => (
-                              <div key={`${src}-${idx}`} className="source-capsule">
-                                <Database size={12} /> {src}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
