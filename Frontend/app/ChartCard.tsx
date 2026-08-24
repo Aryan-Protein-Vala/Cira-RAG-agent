@@ -141,8 +141,8 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
         </div>
       </div>
 
-      {/* explicit height: ResponsiveContainer measures 0px inside a flex parent */}
-      <div style={{ width: '100%', height: 280, minHeight: 280 }}>
+      {/* flex: 1 allows the container to stretch and match the data card height */}
+      <div style={{ width: '100%', flex: 1, minHeight: 280 }}>
         <ResponsiveContainer width="100%" height="100%">
           {activeType === 'bar' ? (
             <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>

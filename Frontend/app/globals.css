@@ -332,12 +332,13 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
    DATA + CHART CARDS — side by side in a row
    ═══════════════════════════════════════════════════════════════════════════ */
 .data-chart-row {
-  display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 16px;
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: stretch; margin-top: 16px;
 }
 .data-chart-row > .data-card { flex: 1; min-width: 320px; }
 .data-chart-row > .chart-card { flex: 1; min-width: 320px; }
 
 .data-card {
+  display: flex; flex-direction: column;
   width: min(640px, 100%); margin-top: 16px; padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 20px;
   background: rgba(255, 255, 255, 0.72);
@@ -353,6 +354,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .data-period { margin: 6px 0 16px; }
 
 .mini-table {
+  flex: 1;
   border-radius: 14px; overflow: hidden;
   background: rgba(255, 255, 255, 0.5);
   box-shadow: var(--shadow-inset);
@@ -380,6 +382,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 /* ── Chart card ── */
 .chart-card {
+  display: flex; flex-direction: column;
   width: min(720px, 100%); margin-top: 16px; padding: 20px; border-radius: 20px;
   background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: var(--shadow-card);
