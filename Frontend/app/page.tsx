@@ -481,6 +481,8 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
 function Sidebar({
   collapsed,
   onToggle,
+  onHoverExpand,
+  onHoverCollapse,
   onLogout,
   activeId,
   onSelect,
@@ -506,6 +508,8 @@ function Sidebar({
   showToast: (msg: string, type?: 'success' | 'error') => void
   onRequestDelete: (session: Session) => void
   onOpenProfile: () => void
+  onHoverExpand?: () => void
+  onHoverCollapse?: () => void
 }) {
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState<string | null>(null)
@@ -540,7 +544,11 @@ function Sidebar({
   }
 
   return (
-    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <aside 
+      className={`sidebar ${collapsed ? 'collapsed' : ''}`}
+      onMouseEnter={onHoverExpand}
+      onMouseLeave={onHoverCollapse}
+    >
       <div className="sidebar-top">
         <button className="sidebar-brand-btn" onClick={collapsed ? onToggle : undefined}>
           <BrandMark />
@@ -647,7 +655,7 @@ export default function Page() {
   const [isAuthLoaded, setIsAuthLoaded] = useState(false)
   const [employeeId, setEmployeeId] = useState('')
   const [sessionToken, setSessionToken] = useState('')
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [activeId, setActiveId] = useState<string>('new')
   const [active, setActive] = useState('New conversation')
   const [messages, setMessages] = useState<Message[]>([])
@@ -1005,6 +1013,8 @@ export default function Page() {
         <Sidebar
           collapsed={collapsed}
           onToggle={() => setCollapsed(!collapsed)}
+          onHoverExpand={() => window.innerWidth >= 720 && setCollapsed(false)}
+          onHoverCollapse={() => window.innerWidth >= 720 && setCollapsed(true)}
           onLogout={handleLogout}
           activeId={activeId}
           onSelect={selectChat}
