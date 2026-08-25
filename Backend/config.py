@@ -58,6 +58,7 @@ def _str(name: str, default: str = "") -> str:
 # Data source selection
 #   auto      -> HANA, then Service Layer, then simulator (default)
 #   hana      -> HANA only (fail loudly if unreachable)
+#   mssql     -> Microsoft SQL Server only
 #   service   -> SAP B1 Service Layer (OData) only
 #   simulator -> local SQLite SAP-B1-shaped sandbox (offline development)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -79,6 +80,15 @@ HANA_POOL_SIZE = _int("HANA_POOL_SIZE", 4)
 HANA_EXTRA_SCHEMAS = [
     s.strip().upper() for s in _str("HANA_EXTRA_SCHEMAS", "").split(",") if s.strip()
 ]
+
+# ── Microsoft SQL Server (Alternative to HANA) ───────────────────────────────
+MSSQL_HOST = _str("MSSQL_HOST", "WSRV46076-IND")
+MSSQL_PORT = _int("MSSQL_PORT", 1433)
+MSSQL_USER = _str("MSSQL_USER", "sa")
+MSSQL_PASSWORD = _str("MSSQL_PASSWORD", "Ceh8=oDeT6*qivo")
+MSSQL_DATABASE = _str("MSSQL_DATABASE", "LEDURE_LIVE_300323")
+MSSQL_CONNECT_TIMEOUT = _int("MSSQL_CONNECT_TIMEOUT", 8000)
+MSSQL_POOL_SIZE = _int("MSSQL_POOL_SIZE", 4)
 
 # ── SAP Business One Service Layer (OData) ───────────────────────────────────
 SAP_B1_HOST = _str("SAP_B1_HOST", HANA_HOST)

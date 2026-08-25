@@ -18,7 +18,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { AreaChart as AreaIcon, BarChart3, LineChart as LineIcon, PieChart as PieIcon, TrendingUp } from 'lucide-react'
+import { AreaChart as AreaIcon, BarChart3, LineChart as LineIcon, PieChart as PieIcon, TrendingUp, Maximize2, X } from 'lucide-react'
 
 export type ChartType = 'bar' | 'line' | 'pie' | 'area'
 
@@ -34,7 +34,7 @@ export interface ChartPayload {
   sourceRows?: number
 }
 
-const COLORS = ['#38bdf8', '#818cf8', '#c084fc', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#f472b6']
+const COLORS = ['#c4b5fd', '#f9a8d4', '#fbbf24', '#86efac', '#93c5fd', '#fda4af', '#a5b4fc', '#fdba74']
 
 const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [
   { id: 'bar', label: 'Bar', icon: <BarChart3 size={13} /> },
@@ -60,11 +60,9 @@ function humanise(key: string): string {
 }
 
 export function ChartCard({ payload }: { payload: ChartPayload }) {
-  // IMPORTANT: hooks must run on every render — the old component returned
-  // early *before* useState, which crashed React ("rendered fewer hooks than
-  // expected") as soon as a chart-less answer followed a chart answer.
   const rows = Array.isArray(payload?.data) ? payload.data : []
   const [activeType, setActiveType] = useState<ChartType>(payload?.chartType || 'bar')
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const { xKey, yKey } = useMemo(() => {
     const first = rows[0] ?? {}
@@ -112,107 +110,146 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
     tickLine: false,
   } as const
 
-  return (
-    <div className="chart-card">
-      <div className="chart-card-head">
-        <div>
-          <span className="data-label">
-            <TrendingUp size={13} /> {payload.category || 'ANALYTICS VISUALIZATION'}
-          </span>
-          <strong style={{ color: 'var(--foreground)' }}>{payload.title || `${humanise(yKey)} by ${humanise(xKey)}`}</strong>
-          {payload.aggregated && payload.sourceRows ? (
-            <span className="chart-subtitle">
-              {payload.points} groups aggregated from {payload.sourceRows.toLocaleString()} rows
-            </span>
-          ) : null}
-        </div>
+  const renderChart = (expanded: boolean) => {
+    const shouldHideTicks = !expanded && data.length > 8
+    const xAxisProps = expanded 
+      ? { tick: true, angle: -45, textAnchor: 'end', height: 80, interval: 0 as const } 
+      : { tick: shouldHideTicks ? false : undefined, height: shouldHideTicks ? 10 : 30 }
 
-        <div className="chart-switcher" role="group" aria-label="Chart type">
-          {CHART_TYPES.map((type) => (
-            <button
-              key={type.id}
-              onClick={() => setActiveType(type.id)}
-              className={activeType === type.id ? 'active' : ''}
-              aria-pressed={activeType === type.id}
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        {activeType === 'bar' ? (
+          <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
+            <defs>
+              <linearGradient id={`ciraBarGradient-${expanded ? 'exp' : 'norm'}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#c4b5fd" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="#f9a8d4" stopOpacity={0.45} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
+            <YAxis {...axisProps} tickFormatter={compact} width={64} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--secondary)' }} />
+            <Bar dataKey={yKey} fill={`url(#ciraBarGradient-${expanded ? 'exp' : 'norm'})`} radius={[8, 8, 0, 0]} maxBarSize={expanded ? 100 : 64} />
+          </BarChart>
+        ) : activeType === 'line' ? (
+          <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
+            <YAxis {...axisProps} tickFormatter={compact} width={64} />
+            <Tooltip content={<CustomTooltip />} />
+            <Line
+              type="monotone"
+              dataKey={yKey}
+              stroke="#a78bfa"
+              strokeWidth={3}
+              dot={data.length <= (expanded ? 60 : 30) ? { fill: '#a78bfa', r: expanded ? 5 : 3 } : false}
+              activeDot={{ r: expanded ? 8 : 6 }}
+            />
+          </LineChart>
+        ) : activeType === 'area' ? (
+          <AreaChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
+            <defs>
+              <linearGradient id={`ciraAreaGradient-${expanded ? 'exp' : 'norm'}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#c4b5fd" stopOpacity={0.6} />
+                <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
+            <YAxis {...axisProps} tickFormatter={compact} width={64} />
+            <Tooltip content={<CustomTooltip />} />
+            <Area type="monotone" dataKey={yKey} stroke="#a78bfa" strokeWidth={2} fill={`url(#ciraAreaGradient-${expanded ? 'exp' : 'norm'})`} />
+          </AreaChart>
+        ) : (
+          <PieChart>
+            <Tooltip content={<CustomTooltip />} />
+            <Pie
+              data={data}
+              dataKey={yKey}
+              nameKey={xKey}
+              cx="50%"
+              cy="50%"
+              outerRadius={expanded ? 200 : 110}
+              innerRadius={expanded ? 120 : 60}
+              paddingAngle={3}
             >
-              {type.icon} {type.label}
+              {data.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Legend
+              formatter={(value) => <span className="chart-legend-label" style={{ color: 'var(--foreground)' }}>{String(value)}</span>}
+              wrapperStyle={{ fontSize: expanded ? 14 : 11, maxHeight: expanded ? 120 : 72, overflowY: 'auto' }}
+            />
+          </PieChart>
+        )}
+      </ResponsiveContainer>
+    )
+  }
+
+  return (
+    <>
+      <div className="chart-card">
+        <div className="chart-card-head">
+          <div>
+            <span className="data-label">
+              <TrendingUp size={13} /> {payload.category || 'ANALYTICS VISUALIZATION'}
+            </span>
+            <strong style={{ color: 'var(--foreground)' }}>{payload.title || `${humanise(yKey)} by ${humanise(xKey)}`}</strong>
+            {payload.aggregated && payload.sourceRows ? (
+              <span className="chart-subtitle">
+                {payload.points} groups aggregated from {payload.sourceRows.toLocaleString()} rows
+              </span>
+            ) : null}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div className="chart-switcher" role="group" aria-label="Chart type">
+              {CHART_TYPES.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setActiveType(type.id)}
+                  className={activeType === type.id ? 'active' : ''}
+                  aria-pressed={activeType === type.id}
+                >
+                  {type.icon} {type.label}
+                </button>
+              ))}
+            </div>
+            <button 
+              className="icon-button" 
+              onClick={() => setIsExpanded(true)}
+              aria-label="Expand chart"
+              style={{ width: 32, height: 32 }}
+            >
+              <Maximize2 size={14} />
             </button>
-          ))}
+          </div>
+        </div>
+
+        {/* flex: 1 allows the container to stretch and match the data card height */}
+        <div style={{ width: '100%', flex: 1, minHeight: 280 }}>
+          {renderChart(false)}
         </div>
       </div>
 
-      {/* explicit height: ResponsiveContainer measures 0px inside a flex parent */}
-      <div style={{ width: '100%', height: 280, minHeight: 280 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          {activeType === 'bar' ? (
-            <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
-              <defs>
-                <linearGradient id="ciraBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="#818cf8" stopOpacity={0.45} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" angle={data.length > 8 ? -20 : 0} textAnchor={data.length > 8 ? 'end' : 'middle'} height={data.length > 8 ? 60 : 30} />
-              <YAxis {...axisProps} tickFormatter={compact} width={64} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--secondary)' }} />
-              <Bar dataKey={yKey} fill="url(#ciraBarGradient)" radius={[8, 8, 0, 0]} maxBarSize={64} />
-            </BarChart>
-          ) : activeType === 'line' ? (
-            <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
-              <YAxis {...axisProps} tickFormatter={compact} width={64} />
-              <Tooltip content={<CustomTooltip />} />
-              <Line
-                type="monotone"
-                dataKey={yKey}
-                stroke="#38bdf8"
-                strokeWidth={3}
-                dot={data.length <= 30 ? { fill: '#38bdf8', r: 3 } : false}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          ) : activeType === 'area' ? (
-            <AreaChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: 24 }}>
-              <defs>
-                <linearGradient id="ciraAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.7} />
-                  <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey={xKey} {...axisProps} dy={8} interval="preserveStartEnd" />
-              <YAxis {...axisProps} tickFormatter={compact} width={64} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey={yKey} stroke="#38bdf8" strokeWidth={2} fill="url(#ciraAreaGradient)" />
-            </AreaChart>
-          ) : (
-            <PieChart>
-              <Tooltip content={<CustomTooltip />} />
-              <Pie
-                data={data}
-                dataKey={yKey}
-                nameKey={xKey}
-                cx="50%"
-                cy="50%"
-                outerRadius={92}
-                innerRadius={52}
-                paddingAngle={3}
-              >
-                {data.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend
-                formatter={(value) => <span className="chart-legend-label" style={{ color: 'var(--foreground)' }}>{String(value)}</span>}
-                wrapperStyle={{ fontSize: 11, maxHeight: 72, overflowY: 'auto' }}
-              />
-            </PieChart>
-          )}
-        </ResponsiveContainer>
-      </div>
-    </div>
+      {isExpanded && (
+        <div className="chart-modal-overlay" onClick={() => setIsExpanded(false)}>
+          <div className="chart-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="chart-modal-header">
+              <h3>{payload.title || `${humanise(yKey)} by ${humanise(xKey)}`}</h3>
+              <button className="icon-button" onClick={() => setIsExpanded(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="chart-modal-body">
+              {renderChart(true)}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
