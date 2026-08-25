@@ -11,9 +11,9 @@
 :root {
   color-scheme: light;
 
-  /* ── Brand Palette (Pastel UI Image Exact Matches) ── */
+  /* ── Page & Surface Colors (Pastel UI Inspiration) ── */
   --bg-page:       #f5efed;   /* Warm cream background */
-  --bg-sidebar:    #e0d6fc;   /* Top-right Lavender card */
+  --bg-sidebar:    #fbf4fb;   /* White/light cream sidebar instead of purple */
   --bg-card:       #fbf4fb;   /* Inner white card (top-right) */
   --bg-card-blue:  #cce3fa;   /* Top-left blue card */
   --bg-card-lav:   #ebdff8;   /* Bottom-right light purple card */
@@ -50,7 +50,7 @@
   --border:                transparent;
   --input:                 var(--bg-input);
   --ring:                  rgba(158, 205, 246, 0.4);
-  --radius:                1rem; /* 16px - stoney not bubbly */
+  --radius:                0.5rem; /* 8px - near square */
 
   /* ── Surfaces ── */
   --surface:       #fbf4fb;
@@ -63,24 +63,24 @@
 
   /* ── Stoney Bevel / Claymorphism Shadows ── */
   --shadow-raised:       
-    6px 6px 14px rgba(170, 160, 180, 0.15), 
-    inset 2px 2px 4px rgba(255, 255, 255, 0.8), 
-    inset -2px -2px 4px rgba(170, 160, 180, 0.1);
+    4px 4px 10px rgba(170, 160, 180, 0.12), 
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4), 
+    inset -1px -1px 2px rgba(170, 160, 180, 0.05);
   --shadow-raised-hover: 
-    8px 8px 18px rgba(170, 160, 180, 0.2), 
-    inset 2px 2px 4px rgba(255, 255, 255, 0.95), 
-    inset -2px -2px 4px rgba(170, 160, 180, 0.15);
+    6px 6px 14px rgba(170, 160, 180, 0.16), 
+    inset 1px 1px 2px rgba(255, 255, 255, 0.6), 
+    inset -1px -1px 2px rgba(170, 160, 180, 0.08);
   --shadow-inset:        
-    inset 3px 3px 6px rgba(170, 160, 180, 0.15), 
-    inset -3px -3px 6px rgba(255, 255, 255, 0.8);
+    inset 2px 2px 4px rgba(170, 160, 180, 0.1), 
+    inset -2px -2px 4px rgba(255, 255, 255, 0.6);
   --shadow-card:         
-    8px 8px 24px rgba(170, 160, 180, 0.12), 
-    inset 2px 2px 6px rgba(255, 255, 255, 0.8),
-    inset -2px -2px 6px rgba(170, 160, 180, 0.08);
+    6px 6px 16px rgba(170, 160, 180, 0.1), 
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4),
+    inset -1px -1px 2px rgba(170, 160, 180, 0.05);
   --shadow-card-hover:   
-    12px 12px 30px rgba(170, 160, 180, 0.16), 
-    inset 2px 2px 6px rgba(255, 255, 255, 0.9),
-    inset -2px -2px 6px rgba(170, 160, 180, 0.1);
+    10px 10px 24px rgba(170, 160, 180, 0.14), 
+    inset 1px 1px 2px rgba(255, 255, 255, 0.5),
+    inset -1px -1px 2px rgba(170, 160, 180, 0.06);
 }
 
 /* ── Reset ── */
@@ -115,7 +115,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
    SIDEBAR
    ═══════════════════════════════════════════════════════════════════════════ */
 .sidebar {
-  height: calc(100vh - 20px); margin: 10px; margin-right: 0; border-radius: 20px;
+  height: calc(100vh - 20px); margin: 10px; margin-right: 0; border-radius: 12px;
   width: 260px; display: flex; flex-direction: column;
   padding: 20px 14px 14px;
   background: var(--bg-sidebar);
@@ -148,7 +148,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   width: 36px; height: 36px; display: inline-grid; place-items: center;
   border: none; color: var(--text-soft);
   background: var(--bg-card);
-  border-radius: 12px; transition: .2s ease;
+  border-radius: 8px; transition: .2s ease;
   box-shadow: var(--shadow-raised); cursor: pointer;
 }
 .icon-button:hover { color: var(--text-strong); box-shadow: var(--shadow-raised-hover); transform: translateY(-1px); }
@@ -162,7 +162,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 
 .new-chat, .secondary-button, .primary-button, .theme-toggle {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  border: none; border-radius: 12px; color: var(--text-strong);
+  border: none; border-radius: 8px; color: var(--text-strong);
   background: var(--bg-card);
   transition: .2s ease; box-shadow: var(--shadow-raised); cursor: pointer;
 }
@@ -177,7 +177,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .history-search {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; color: var(--text-soft);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-input);
   box-shadow: var(--shadow-inset);
   border: none;
@@ -225,11 +225,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 
 .history-menu {
   position: absolute; z-index: 5; top: 36px; right: 12px; width: 140px; padding: 6px;
-  border-radius: 14px; border: none;
+  border-radius: 8px; border: none;
   background: #ffffff;
   box-shadow: var(--shadow-card);
 }
-.history-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: 10px; color: var(--foreground); background: transparent; text-align: left; font-size: 13px; font-weight: 500; cursor: pointer; }
+.history-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: 6px; color: var(--foreground); background: transparent; text-align: left; font-size: 13px; font-weight: 500; cursor: pointer; }
 .history-menu button:hover { background: rgba(167, 139, 250, 0.08); }
 .history-menu .delete-action { color: var(--destructive); }
 
@@ -280,7 +280,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .chat-intro { display: flex; gap: 20px; margin-bottom: 60px; }
 .intro-icon {
   width: 44px; height: 44px; display: grid; place-items: center;
-  border: none; border-radius: 12px;
+  border: none; border-radius: 8px;
   background: var(--bg-card-lav);
   color: var(--foreground);
   box-shadow: var(--shadow-raised);
@@ -311,21 +311,21 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 /* User bubble — color injected by BUBBLE_PALETTE inline style */
 .message-row.user .bubble {
   display: inline-block; padding: 12px 20px;
-  border: 1.5px solid transparent;
-  border-radius: 20px 20px 4px 20px;
-  box-shadow: var(--shadow-card);
+  border: none;
+  border-radius: 8px 8px 2px 8px;
+  box-shadow: 2px 4px 10px rgba(170, 160, 180, 0.12);
   text-align: left;
 }
-.message-row.user .bubble:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+.message-row.user .bubble:hover { transform: translateY(-2px); box-shadow: 4px 6px 14px rgba(170, 160, 180, 0.15); }
 
 /* AI bubble — color injected by BUBBLE_PALETTE inline style */
 .message-row:not(.user) .bubble {
   display: inline-block; padding: 12px 20px;
-  border: 1.5px solid transparent;
-  border-radius: 20px 20px 20px 4px;
-  box-shadow: var(--shadow-card);
+  border: none;
+  border-radius: 8px 8px 8px 2px;
+  box-shadow: 2px 4px 10px rgba(170, 160, 180, 0.12);
 }
-.message-row:not(.user) .bubble:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+.message-row:not(.user) .bubble:hover { transform: translateY(-2px); box-shadow: 4px 6px 14px rgba(170, 160, 180, 0.15); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    DATA + CHART CARDS — side by side in a row
@@ -339,7 +339,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .data-card {
   display: flex; flex-direction: column;
   width: min(640px, 100%); margin-top: 14px; padding: 16px;
-  border: none; border-radius: 20px;
+  border: none; border-radius: 12px;
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s;
@@ -354,7 +354,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 .mini-table {
   flex: 1;
-  border-radius: 12px; overflow: hidden;
+  border-radius: 8px; overflow: hidden;
   background: var(--bg-inset);
   box-shadow: var(--shadow-inset);
   max-height: 420px; overflow-y: auto;
@@ -384,7 +384,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .data-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .data-actions button {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 7px 12px; border: none; border-radius: 10px;
+  padding: 7px 12px; border: none; border-radius: 6px;
   color: var(--text-strong); background: var(--bg-card);
   font-size: 11px; font-weight: 500; transition: .2s ease;
   box-shadow: var(--shadow-raised); cursor: pointer;
@@ -394,7 +394,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 /* ── Chart card ── */
 .chart-card {
   display: flex; flex-direction: column;
-  width: min(720px, 100%); margin-top: 14px; padding: 16px; border-radius: 20px;
+  width: min(720px, 100%); margin-top: 14px; padding: 16px; border-radius: 12px;
   background: var(--bg-card); border: none;
   box-shadow: var(--shadow-card);
   transition: transform 0.25s, box-shadow 0.25s;
@@ -456,7 +456,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .composer {
   pointer-events: auto; display: flex; align-items: flex-end; gap: 12px;
   width: min(840px, 100%); margin: 0 auto; padding: 10px 14px;
-  border: none; border-radius: 16px;
+  border: none; border-radius: 12px;
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
   transition: box-shadow 0.2s;
@@ -467,7 +467,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .composer textarea::placeholder { color: var(--text-soft); }
 
 .send-button {
-  width: 38px; height: 38px; display: grid; place-items: center; border: none; border-radius: 10px;
+  width: 38px; height: 38px; display: grid; place-items: center; border: none; border-radius: 8px;
   color: #fff; background: var(--btn-blue);
   box-shadow: var(--shadow-raised);
   transition: .2s ease; cursor: pointer;
@@ -513,7 +513,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
   background: var(--bg-card-rose);
   font-size: 14px; font-weight: 600;
   box-shadow: var(--shadow-raised);
-  border-radius: 12px; transition: .2s ease; cursor: pointer;
+  border-radius: 8px; transition: .2s ease; cursor: pointer;
 }
 .primary-button:hover { box-shadow: var(--shadow-raised-hover); transform: translateY(-1px); }
 .login-button { margin-top: 10px; }
@@ -527,7 +527,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .data-card-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 600;
+  padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;
   letter-spacing: .04em; text-transform: uppercase;
   background: var(--bg-card-cream); border: none; color: var(--foreground);
   box-shadow: var(--shadow-raised);
@@ -537,7 +537,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .data-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0 10px; }
 .data-search {
   display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;
-  padding: 7px 12px; border-radius: 12px;
+  padding: 7px 12px; border-radius: 8px;
   background: var(--bg-input); border: none; color: var(--text-soft);
   box-shadow: var(--shadow-inset);
 }
@@ -546,7 +546,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 .mini-button, .mini-select {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;
+  padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 600;
   background: #ffffff; border: none; color: var(--text-strong);
   cursor: pointer; box-shadow: var(--shadow-raised);
 }
@@ -554,19 +554,19 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .column-picker { position: relative; }
 .column-panel {
   position: absolute; right: 0; top: 34px; z-index: 30; width: 230px; padding: 10px;
-  border-radius: 16px; border: none;
+  border-radius: 12px; border: none;
   background: #ffffff;
   box-shadow: var(--shadow-card);
 }
 .column-panel-actions { display: flex; gap: 8px; margin-bottom: 8px; }
-.column-panel-actions button { flex: 1; padding: 5px; font-size: 11px; font-weight: 600; border-radius: 10px; border: none; background: var(--bg-card-blue); color: #3858a0; cursor: pointer; }
+.column-panel-actions button { flex: 1; padding: 5px; font-size: 11px; font-weight: 600; border-radius: 6px; border: none; background: var(--bg-card-blue); color: #3858a0; cursor: pointer; }
 .column-panel-list { max-height: 220px; overflow-y: auto; display: grid; gap: 4px; }
-.column-panel-list label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-strong); padding: 3px 4px; border-radius: 8px; }
+.column-panel-list label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-strong); padding: 3px 4px; border-radius: 6px; }
 .column-panel-list label:hover { background: var(--bg-card-blue); }
 
 .pagination { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 11px; color: var(--text-soft); }
 .pagination button {
-  padding: 5px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;
+  padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 600;
   border: none; background: #ffffff; color: var(--text-strong);
   cursor: pointer; box-shadow: var(--shadow-raised);
 }
@@ -596,7 +596,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .suggestions button {
-  padding: 8px 15px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  padding: 8px 15px; border-radius: 8px; font-size: 11.5px; font-weight: 600;
   border: none; cursor: pointer; transition: .2s ease;
   box-shadow: var(--shadow-raised);
 }
@@ -614,7 +614,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .source-capsules { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .source-capsule {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
   box-shadow: var(--shadow-raised); transition: .2s ease; cursor: pointer;
   border: none;
@@ -643,7 +643,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal-content {
   background: var(--bg-card);
-  border: none; border-radius: 20px;
+  border: none; border-radius: 12px;
   padding: 30px; width: 360px; max-width: 90vw; color: var(--text-strong);
   box-shadow: var(--shadow-card); text-align: center;
 }
