@@ -11,61 +11,61 @@
 :root {
   color-scheme: light;
 
-  /* ── Pastel Palette ── */
-  --bg-cream:    #faf7f5;
-  --bg-warm:     #f5f0eb;
+  /* ── Warm Pastel Palette ── */
+  --bg-cream:    #fff6e5;
+  --bg-warm:     #ffe8be;
 
-  --pastel-lavender:  #e8dff5;
-  --pastel-rose:      #fce4ec;
-  --pastel-peach:     #ffe8d6;
-  --pastel-mint:      #d5f5e3;
-  --pastel-sky:       #dbeafe;
-  --pastel-butter:    #fef9c3;
+  --pastel-lavender:  #a6aeff;
+  --pastel-rose:      #ffe8be;
+  --pastel-peach:     #ffe8be;
+  --pastel-mint:      #ecec7e;
+  --pastel-sky:       #e0e4ff;
+  --pastel-butter:    #ecec7e;
 
-  --accent-violet:    #a78bfa;
-  --accent-rose:      #f472b6;
+  --accent-violet:    #a6aeff;
+  --accent-rose:      #fb923c;
   --accent-peach:     #fb923c;
-  --accent-mint:      #34d399;
-  --accent-sky:       #60a5fa;
+  --accent-mint:      #ecec7e;
+  --accent-sky:       #a6aeff;
 
   /* ── Core Tokens ── */
-  --background: #faf7f5;
-  --foreground: #3d3041;
+  --background: var(--bg-cream);
+  --foreground: #252525;
   --card: rgba(255, 255, 255, 0.72);
-  --card-foreground: #3d3041;
+  --card-foreground: #252525;
   --popover: rgba(255, 255, 255, 0.92);
-  --popover-foreground: #3d3041;
-  --primary: #a78bfa;
+  --popover-foreground: #252525;
+  --primary: #a6aeff;
   --primary-foreground: #ffffff;
-  --secondary: rgba(167, 139, 250, 0.08);
-  --secondary-foreground: #3d3041;
-  --muted: rgba(61, 48, 65, 0.05);
-  --muted-foreground: rgba(61, 48, 65, 0.55);
-  --accent: rgba(167, 139, 250, 0.12);
-  --accent-foreground: #3d3041;
+  --secondary: rgba(166, 174, 255, 0.08);
+  --secondary-foreground: #252525;
+  --muted: rgba(37, 37, 37, 0.05);
+  --muted-foreground: rgba(37, 37, 37, 0.55);
+  --accent: rgba(166, 174, 255, 0.12);
+  --accent-foreground: #252525;
   --destructive: #f87171;
   --destructive-foreground: #ffffff;
-  --border: rgba(61, 48, 65, 0.08);
+  --border: rgba(37, 37, 37, 0.08);
   --input: rgba(255, 255, 255, 0.85);
-  --ring: rgba(167, 139, 250, 0.35);
+  --ring: rgba(166, 174, 255, 0.35);
   --radius: 1.25rem;
 
   /* ── Surfaces ── */
   --surface: rgba(255, 255, 255, 0.65);
   --surface-strong: rgba(255, 255, 255, 0.88);
-  --surface-line: rgba(61, 48, 65, 0.08);
-  --text-strong: #3d3041;
-  --text-soft: rgba(61, 48, 65, 0.55);
-  --chart-axis: rgba(61, 48, 65, 0.45);
-  --chart-grid: rgba(61, 48, 65, 0.06);
-  --film: rgba(250, 247, 245, 0.45);
+  --surface-line: rgba(37, 37, 37, 0.08);
+  --text-strong: #252525;
+  --text-soft: rgba(37, 37, 37, 0.55);
+  --chart-axis: rgba(37, 37, 37, 0.45);
+  --chart-grid: rgba(37, 37, 37, 0.06);
+  --film: rgba(255, 246, 229, 0.45);
 
-  /* ── 3D Neumorphic helpers ── */
-  --shadow-raised: 6px 6px 16px rgba(180, 160, 140, 0.18), -4px -4px 12px rgba(255, 255, 255, 0.85);
-  --shadow-raised-hover: 8px 8px 22px rgba(180, 160, 140, 0.24), -5px -5px 14px rgba(255, 255, 255, 0.92);
-  --shadow-inset: inset 3px 3px 8px rgba(180, 160, 140, 0.15), inset -2px -2px 6px rgba(255, 255, 255, 0.7);
-  --shadow-card: 8px 8px 24px rgba(180, 160, 140, 0.2), -4px -4px 14px rgba(255, 255, 255, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  --shadow-card-hover: 10px 10px 30px rgba(180, 160, 140, 0.28), -5px -5px 18px rgba(255, 255, 255, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  /* ── 3D Neumorphic helpers (Warmer tints) ── */
+  --shadow-raised: 6px 6px 16px rgba(180, 150, 110, 0.15), -4px -4px 12px rgba(255, 255, 255, 0.9);
+  --shadow-raised-hover: 8px 8px 22px rgba(180, 150, 110, 0.2), -5px -5px 14px rgba(255, 255, 255, 0.95);
+  --shadow-inset: inset 3px 3px 8px rgba(180, 150, 110, 0.12), inset -2px -2px 6px rgba(255, 255, 255, 0.8);
+  --shadow-card: 8px 8px 24px rgba(180, 150, 110, 0.15), -4px -4px 14px rgba(255, 255, 255, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-card-hover: 10px 10px 30px rgba(180, 150, 110, 0.22), -5px -5px 18px rgba(255, 255, 255, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 /* ── Reset ── */
@@ -119,9 +119,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
    SIDEBAR
    ═══════════════════════════════════════════════════════════════════════════ */
 .sidebar {
-  height: calc(100vh - 28px); margin: 14px; margin-right: 0; border-radius: 24px;
-  width: 300px; display: flex; flex-direction: column;
-  padding: 24px 18px 18px;
+  height: calc(100vh - 20px); margin: 10px; margin-right: 0; border-radius: 20px;
+  width: 260px; display: flex; flex-direction: column;
+  padding: 20px 14px 14px;
   background: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: var(--shadow-card);
@@ -129,7 +129,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   flex-shrink: 0; z-index: 2;
   backdrop-filter: blur(20px);
 }
-.sidebar.collapsed { width: 72px; align-items: center; padding-left: 0; padding-right: 0; padding-top: 24px; }
+.sidebar.collapsed { width: 56px; align-items: center; padding-left: 0; padding-right: 0; padding-top: 20px; }
 
 .sidebar-top, .sidebar-brand, .profile, .data-card-head, .chat-header, .message-row { display: flex; align-items: center; }
 .sidebar-top { justify-content: space-between; width: 100%; padding: 0 4px; }
@@ -274,8 +274,8 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .chat-shell { min-width: 0; display: flex; flex: 1; flex-direction: column; position: relative; }
 
 .chat-header {
-  justify-content: space-between; min-height: 72px; padding: 0 36px;
-  border-bottom: 1px solid rgba(61, 48, 65, 0.05); background: transparent;
+  justify-content: space-between; min-height: 56px; padding: 0 30px;
+  border-bottom: 1px solid rgba(37, 37, 37, 0.05); background: transparent;
 }
 .chat-header h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--text-strong); }
 .mobile-title, .header-actions { display: flex; align-items: center; gap: 14px; }
