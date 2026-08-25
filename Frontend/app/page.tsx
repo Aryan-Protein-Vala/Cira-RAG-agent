@@ -618,7 +618,28 @@ function Robot() {
       "Did you know I can query your SAP HANA database in real-time?",
       "Let's find those open invoices!",
       "B1 IQ at your service. Powered by Cinntra.",
-      "Just crunching some numbers. Need anything?"
+      "Just crunching some numbers. Need anything?",
+      "Who knew SAP data could look this good?",
+      "Ask me anything about your inventory or general ledger.",
+      "Cinntra engineers gave me a glowing antenna for a reason!",
+      "I dream of perfectly normalized database tables.",
+      "Got any complex queries? I love a good challenge.",
+      "Checking the latest purchase orders for you...",
+      "I speak fluent SQL so you don't have to.",
+      "Is it time to run the end-of-month reports yet?",
+      "B1 IQ: Where enterprise data meets intelligent chat.",
+      "I can scan thousands of SAP rows in milliseconds!",
+      "Hovering makes me happy. ^_^",
+      "I'm keeping an eye on your stock levels.",
+      "Don't worry, I won't write to your ERP. I'm read-only!",
+      "Cinntra made me smart, but you make me useful.",
+      "I wonder what the top 10 customers bought this year...",
+      "Need a chart? Just ask me to draw one!",
+      "I never sleep, I just float here waiting for questions.",
+      "Your financial data is safe with me.",
+      "Let's uncover some hidden insights today.",
+      "I can generate SQL faster than you can say 'HANA'.",
+      "I'm feeling particularly analytical today."
     ]
     setThought(thoughts[Math.floor(Math.random() * thoughts.length)])
     setOpen(true)
