@@ -690,6 +690,17 @@ function ChibiRobot({ isSpeaking }: { isSpeaking?: boolean }) {
   )
 }
 
+const ANIMALS = ['🐵', '🦊', '🐱', '🐼', '🐨', '🐸', '🐰', '🦁', '🐻', '🐹']
+
+function UserAvatar({ id }: { id: string }) {
+  const index = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % ANIMALS.length
+  return (
+    <div className="user-avatar-circle">
+      <span className="user-animal">{ANIMALS[index] || '🐵'}</span>
+    </div>
+  )
+}
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Sidebar                                                                    */
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -1295,9 +1306,7 @@ export default function Page() {
                   {message.role === 'assistant' ? (
                     <ChibiRobot isSpeaking={isThinking && index === messages.length - 1} />
                   ) : (
-                    <div className="message-avatar">
-                      {employeeId.slice(0, 2).toUpperCase()}
-                    </div>
+                    <UserAvatar id={employeeId} />
                   )}
                   <div className="message-content">
                     <span className="message-author">

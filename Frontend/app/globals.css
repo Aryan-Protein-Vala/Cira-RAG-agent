@@ -746,7 +746,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 /* Chibi Robot Avatar */
 .chibi-robot { position: relative; width: 34px; height: 34px; flex-shrink: 0; border-radius: 12px; background: var(--bg-card-blue); display: grid; place-items: center; box-shadow: var(--shadow-raised); transition: all 0.3s; animation: chibi-float 3.2s ease-in-out infinite; }
 .chibi-robot.speaking { animation: speaking-pulse 0.8s infinite alternate, chibi-float 3.2s ease-in-out infinite; }
-.chibi-robot:hover { animation: chibi-bounce 0.6s ease-in-out infinite alternate; cursor: pointer; }
+.chibi-robot:hover { cursor: pointer; }
 .chibi-robot .antenna-mini { position: absolute; left: 16px; top: -6px; width: 2px; height: 8px; background: #6f7ea8; }
 .chibi-robot .antenna-mini:after { content: ''; position: absolute; top: -3px; left: -2px; width: 6px; height: 6px; border-radius: 50%; background: #7ea4ee; }
 .chibi-robot.speaking .antenna-mini:after { background: #b2f5d9; box-shadow: 0 0 6px #b2f5d9; }
@@ -755,6 +755,11 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .chibi-robot:hover .robot-face-mini i { width: 6px; height: 3px; border-radius: 50% 50% 0 0; margin-top: -1px; }
 .robot-body-mini { position: absolute; left: 9px; bottom: 4px; display: flex; gap: 3px; }
 .robot-body-mini b { width: 4px; height: 3px; border-radius: 3px; background: #7384b0; }
+
+/* User Avatar */
+.user-avatar-circle { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, var(--bg-card-blue), var(--bg-card-lav)); display: grid; place-items: center; box-shadow: var(--shadow-raised); }
+.user-animal { font-size: 18px; animation: chibi-float 3.2s ease-in-out infinite; display: inline-block; }
+
 @keyframes chibi-bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
 @keyframes speaking-pulse { 0% { transform: translateY(-1px) scale(1); } 100% { transform: translateY(-2px) scale(1.08); } }
 @keyframes chibi-float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1deg); } }
