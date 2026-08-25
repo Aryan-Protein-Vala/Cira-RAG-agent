@@ -317,7 +317,8 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
   const fileBase = (entity ?? 'sap').toString().replace(/[^\w.-]+/g, '_')
 
   return (
-    <div className="data-card">
+    <>
+      <div className="data-card">
       <div className="data-card-head">
         <div>
           <span className="data-label">
@@ -477,6 +478,7 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
           <AlertTriangle size={12} /> {meta.warnings.join(' ')}
         </p>
       ) : null}
+      </div>
       
       {isExpanded && (
         <div className="chart-modal-overlay" onClick={() => setIsExpanded(false)}>
@@ -553,7 +555,7 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
 

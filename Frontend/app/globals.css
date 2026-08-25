@@ -12,8 +12,8 @@
   color-scheme: light;
 
   /* ── Warm Pastel Palette ── */
-  --bg-cream:    #fff6e5;
-  --bg-warm:     #ffe8be;
+  --bg-cream:    #ffffff;
+  --bg-warm:     #ffffff;
 
   --pastel-lavender:  #a6aeff;
   --pastel-rose:      #ffe8be;
@@ -58,7 +58,7 @@
   --text-soft: rgba(37, 37, 37, 0.55);
   --chart-axis: rgba(37, 37, 37, 0.45);
   --chart-grid: rgba(37, 37, 37, 0.06);
-  --film: rgba(255, 246, 229, 0.45);
+  --film: rgba(255, 255, 255, 0.45);
 
   /* ── 3D Neumorphic helpers (Warmer tints) ── */
   --shadow-raised: 6px 6px 16px rgba(180, 150, 110, 0.15), -4px -4px 12px rgba(255, 255, 255, 0.9);
