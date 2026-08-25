@@ -1292,13 +1292,13 @@ export default function Page() {
 
               {messages.map((message, index) => (
                 <div className={`message-row ${message.role}`} key={message._streamingId ?? `${message.role}-${index}`}>
-                  <div className="message-avatar">
-                    {message.role === 'assistant' ? (
-                      <ChibiRobot isSpeaking={isThinking && index === messages.length - 1} />
-                    ) : (
-                      employeeId.slice(0, 2).toUpperCase()
-                    )}
-                  </div>
+                  {message.role === 'assistant' ? (
+                    <ChibiRobot isSpeaking={isThinking && index === messages.length - 1} />
+                  ) : (
+                    <div className="message-avatar">
+                      {employeeId.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                   <div className="message-content">
                     <span className="message-author">
                       {message.role === 'assistant' ? 'B1 IQ' : 'You'} <small>· {message.timestamp || 'just now'}</small>
