@@ -133,7 +133,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   width: 36px; height: 36px; display: inline-grid; place-items: center;
   border: none; color: var(--text-soft);
   background: var(--bg-card);
-  border-radius: 8px; transition: .2s ease;
+  border-radius: 8px; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: var(--shadow-raised); cursor: pointer;
 }
 .icon-button:hover { color: var(--text-strong); box-shadow: var(--shadow-raised-hover); transform: translateY(-1px); }
@@ -149,7 +149,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: none; border-radius: 8px; color: var(--text-strong);
   background: var(--bg-card);
-  transition: .2s ease; box-shadow: var(--shadow-raised); cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-raised); cursor: pointer;
 }
 .new-chat { padding: 12px 14px; font-size: 13px; font-weight: 500; }
 .new-chat:hover, .secondary-button:hover, .theme-toggle:hover {
@@ -186,7 +186,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   display: flex; align-items: center; gap: 12px; width: 100%;
   padding: 11px 12px; border: 0; border-radius: 14px;
   background: transparent; color: var(--text-soft); text-align: left;
-  font-size: 13px; transition: all .2s ease; margin-bottom: 2px; cursor: pointer;
+  font-size: 13px; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); margin-bottom: 2px; cursor: pointer;
 }
 .history-item:hover, .history-item:focus-within, .history-item:has(.history-menu) { z-index: 10; }
 .history-item:hover, .history-item.active {
@@ -227,7 +227,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   background: linear-gradient(135deg, var(--pastel-lavender), var(--pastel-rose));
   color: var(--text-strong); font-size: 12px; font-weight: 600;
   border: none; box-shadow: var(--shadow-raised);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 button.avatar { cursor: pointer !important; }
 button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hover); }
@@ -727,3 +727,26 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .robot-bubble { position: absolute; right: 0; bottom: 78px; width: 190px; padding: 12px 14px; border-radius: 14px; background: #f5f1f2; box-shadow: 6px 7px 14px #c4c0c6; color: #626477; font-size: 11px; line-height: 1.5; opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s; }
 .robot-bubble.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
 @keyframes float { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(2deg); } }
+
+/* Robot Expressions */
+.robot-face i { transition: all 0.2s; }
+.robot-face.blink i { height: 2px; border-radius: 2px; }
+.robot-face.blush i { height: 3px; border-radius: 4px; margin-top: -2px; }
+.robot-face.blush::before, .robot-face.blush::after {
+  content: ''; position: absolute; width: 6px; height: 3px;
+  background: #f3b8b7; border-radius: 50%; filter: blur(1px); top: 18px;
+}
+.robot-face.blush::before { left: 8px; }
+.robot-face.blush::after { right: 8px; }
+
+/* Chibi Robot Avatar */
+.chibi-robot { position: relative; width: 34px; height: 34px; border-radius: 12px; background: #e9e4e8; display: grid; place-items: center; box-shadow: var(--shadow-raised); transition: all 0.3s; }
+.chibi-robot.speaking { animation: speaking-pulse 1s infinite alternate; }
+.chibi-robot .antenna-mini { position: absolute; left: 16px; top: -6px; width: 2px; height: 8px; background: #6f7ea8; }
+.chibi-robot .antenna-mini:after { content: ''; position: absolute; top: -3px; left: -2px; width: 6px; height: 6px; border-radius: 50%; background: #7ea4ee; }
+.chibi-robot.speaking .antenna-mini:after { background: #b2f5d9; box-shadow: 0 0 6px #b2f5d9; }
+.robot-face-mini { position: absolute; top: 8px; left: 5px; width: 24px; height: 16px; border-radius: 6px; background: #fff; display: flex; justify-content: space-evenly; align-items: center; box-shadow: inset 1px 1px 2px #c1c7d4; }
+.robot-face-mini i { width: 4px; height: 4px; border-radius: 50%; background: #526793; }
+.robot-body-mini { position: absolute; left: 9px; bottom: 4px; display: flex; gap: 3px; }
+.robot-body-mini b { width: 4px; height: 3px; border-radius: 3px; background: #7384b0; }
+@keyframes speaking-pulse { 0% { transform: scale(1); } 100% { transform: scale(1.05); } }

@@ -594,6 +594,18 @@ function Robot() {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
+  const [expr, setExpr] = useState('normal')
+
+  useEffect(() => {
+    const blinkInterval = setInterval(() => {
+      setExpr(prev => (prev === 'normal' ? 'blink' : prev))
+      setTimeout(() => {
+        setExpr(prev => (prev === 'blink' ? 'normal' : prev))
+      }, 150)
+    }, 4000)
+    return () => clearInterval(blinkInterval)
+  }, [])
+
   return (
     <div 
       className="robot-dock" 
@@ -606,7 +618,9 @@ function Robot() {
         Need a hand? I can help you explore your data.
       </div>
       <button 
-        className="robot" 
+        className={`robot ${expr}`}
+        onMouseEnter={() => setExpr('blush')}
+        onMouseLeave={() => setExpr('normal')}
         onClick={() => setOpen(!open)} 
         onPointerDown={(e) => {
            if (e.button === 0) setDragging(true)
@@ -614,9 +628,21 @@ function Robot() {
         aria-label="Open assistant"
       >
         <span className="antenna" />
-        <span className="robot-face"><i /><i /></span>
+        <span className={`robot-face ${expr}`}><i /><i /></span>
         <span className="robot-body"><b /><b /><b /></span>
       </button>
+    </div>
+  )
+}
+
+function ChibiRobot({ isSpeaking }: { isSpeaking?: boolean }) {
+  return (
+    <div className={`chibi-robot ${isSpeaking ? 'speaking' : ''}`}>
+      <span className="antenna-mini" />
+      <span className="robot-face-mini">
+        <i /><i />
+      </span>
+      <span className="robot-body-mini"><b /><b /><b /></span>
     </div>
   )
 }
@@ -1223,7 +1249,13 @@ export default function Page() {
 
               {messages.map((message, index) => (
                 <div className={`message-row ${message.role}`} key={message._streamingId ?? `${message.role}-${index}`}>
-                  <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
+                  <div className="message-avatar">
+                    {message.role === 'assistant' ? (
+                      <ChibiRobot isSpeaking={isThinking && index === messages.length - 1} />
+                    ) : (
+                      employeeId.slice(0, 2).toUpperCase()
+                    )}
+                  </div>
                   <div className="message-content">
                     <span className="message-author">
                       {message.role === 'assistant' ? 'B1 IQ' : 'You'} <small>· {message.timestamp || 'just now'}</small>
@@ -1241,8 +1273,7 @@ export default function Page() {
                     ) : (
                       <>
                         <div className="bubble" style={{
-                          background: BUBBLE_PALETTE[index % BUBBLE_PALETTE.length].bg,
-                          borderColor: BUBBLE_PALETTE[index % BUBBLE_PALETTE.length].border,
+                          background: 'var(--bg-card-blue)',
                         }}>
                           {message.role === 'assistant' ? (
                             <>
