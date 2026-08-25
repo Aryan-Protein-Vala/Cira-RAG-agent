@@ -757,8 +757,8 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .robot-body-mini b { width: 4px; height: 3px; border-radius: 3px; background: #7384b0; }
 
 /* User Avatar */
-.user-avatar-circle { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, var(--bg-card-blue), var(--bg-card-lav)); display: grid; place-items: center; box-shadow: var(--shadow-raised); }
-.user-animal { font-size: 18px; animation: chibi-float 3.2s ease-in-out infinite; display: inline-block; }
+.user-avatar-circle { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, var(--bg-card-blue), var(--bg-card-lav)); display: grid; place-items: center; box-shadow: var(--shadow-raised); animation: chibi-float 3.2s ease-in-out infinite; }
+.user-animal { font-size: 18px; display: inline-block; }
 
 @keyframes chibi-bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
 @keyframes speaking-pulse { 0% { transform: translateY(-1px) scale(1); } 100% { transform: translateY(-2px) scale(1.08); } }
