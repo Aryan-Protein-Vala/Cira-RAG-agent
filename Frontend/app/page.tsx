@@ -588,6 +588,40 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* Robot Component                                                            */
+/* ────────────────────────────────────────────────────────────────────────── */
+function Robot() {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  return (
+    <div 
+      className="robot-dock" 
+      style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} 
+      onPointerMove={(e) => dragging && setPos({ x: pos.x + e.movementX, y: pos.y + e.movementY })} 
+      onPointerUp={() => setDragging(false)}
+      onPointerLeave={() => setDragging(false)}
+    >
+      <div className={`robot-bubble ${open ? 'show' : ''}`}>
+        Need a hand? I can help you explore your data.
+      </div>
+      <button 
+        className="robot" 
+        onClick={() => setOpen(!open)} 
+        onPointerDown={(e) => {
+           if (e.button === 0) setDragging(true)
+        }} 
+        aria-label="Open assistant"
+      >
+        <span className="antenna" />
+        <span className="robot-face"><i /><i /></span>
+        <span className="robot-body"><b /><b /><b /></span>
+      </button>
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* Sidebar                                                                    */
 /* ────────────────────────────────────────────────────────────────────────── */
 function Sidebar({
@@ -1308,6 +1342,7 @@ export default function Page() {
             <p className="composer-note">B1 IQ reads your ERP read-only. Verify important figures before acting.</p>
           </footer>
         </section>
+        <Robot />
       </main>
 
       {sessionToDelete && (

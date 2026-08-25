@@ -11,24 +11,24 @@
 :root {
   color-scheme: light;
 
-  /* ── Page & Surface Colors (Pastel UI Inspiration) ── */
-  --bg-page:       #eaddd7;   /* Warm cream background (darkened) */
-  --bg-sidebar:    #f2e8f1;   /* White/light cream sidebar (darkened) */
-  --bg-card:       #f2e8f1;   /* Inner white card (darkened) */
-  --bg-card-blue:  #a6cbf0;   /* Blue card (darkened) */
-  --bg-card-lav:   #cbafea;   /* Light purple card (darkened) */
-  --bg-card-cream: #e6d6b3;   /* Warm yellow/beige card (darkened) */
-  --bg-card-mint:  #f0ddce;   /* Input peach/cream color (darkened) */
-  --bg-card-rose:  #f28f9c;   /* Sign up button soft pink/rose (darkened) */
+  /* ── Page & Surface Colors (v0.dev Inspiration) ── */
+  --bg-page:       #e9e4e8;
+  --bg-sidebar:    #dfdbe2;
+  --bg-card:       #f6f2f1;
+  --bg-card-blue:  #c7d8f7;
+  --bg-card-lav:   #e4e0e5;
+  --bg-card-cream: #ebe7eb;
+  --bg-card-mint:  #f4f0f1;
+  --bg-card-rose:  #f3b8b7;
   
-  --btn-blue:      #72b0e6;   /* Search button (darkened) */
+  --btn-blue:      #7ea4ee;
   
-  --bg-input:      #f0ddce;   /* Email input (darkened) */
-  --bg-inset:      #eaddd7;
+  --bg-input:      #f4f0f1;
+  --bg-inset:      #e9e4e8;
   
-  --accent-violet: #72b0e6;
-  --accent-rose:   #f28f9c;
-  --accent-sky:    #72b0e6;
+  --accent-violet: #7ea4ee;
+  --accent-rose:   #f3b8b7;
+  --accent-sky:    #7ea4ee;
 
   /* ── Core Design Tokens ── */
   --background:            var(--bg-page);
@@ -50,7 +50,13 @@
   --border:                transparent;
   --input:                 var(--bg-input);
   --ring:                  rgba(158, 205, 246, 0.4);
-  --radius:                0.5rem; /* 8px - near square */
+  --radius:                0.5rem; 
+  /* ── Stoney Bevel / Claymorphism Shadows (v0.dev) ── */
+  --shadow-raised:       5px 6px 11px #b9b5c0, -4px -4px 10px #f5f2f5;
+  --shadow-raised-hover: 6px 7px 13px #b9b5c0, -5px -5px 12px #f5f2f5;
+  --shadow-inset:        inset 3px 3px 8px #c9c5ca, inset -3px -3px 8px #fbf8fa;
+  --shadow-card:         8px 9px 18px #c4c0c6, -7px -7px 17px #f8f5f7;
+  --shadow-card-hover:   10px 11px 22px #c4c0c6, -8px -8px 20px #f8f5f7;
 
   /* ── Surfaces ── */
   --surface:       #fbf4fb;
@@ -60,27 +66,6 @@
   --text-soft:     rgba(44, 50, 72, 0.55);
   --chart-axis:    rgba(44, 50, 72, 0.4);
   --chart-grid:    rgba(44, 50, 72, 0.06);
-
-  /* ── Stoney Bevel / Claymorphism Shadows ── */
-  --shadow-raised:       
-    4px 4px 10px rgba(170, 160, 180, 0.12), 
-    inset 1px 1px 2px rgba(255, 255, 255, 0.4), 
-    inset -1px -1px 2px rgba(170, 160, 180, 0.05);
-  --shadow-raised-hover: 
-    6px 6px 14px rgba(170, 160, 180, 0.16), 
-    inset 1px 1px 2px rgba(255, 255, 255, 0.6), 
-    inset -1px -1px 2px rgba(170, 160, 180, 0.08);
-  --shadow-inset:        
-    inset 2px 2px 4px rgba(170, 160, 180, 0.1), 
-    inset -2px -2px 4px rgba(255, 255, 255, 0.6);
-  --shadow-card:         
-    6px 6px 16px rgba(170, 160, 180, 0.1), 
-    inset 1px 1px 2px rgba(255, 255, 255, 0.4),
-    inset -1px -1px 2px rgba(170, 160, 180, 0.05);
-  --shadow-card-hover:   
-    10px 10px 24px rgba(170, 160, 180, 0.14), 
-    inset 1px 1px 2px rgba(255, 255, 255, 0.5),
-    inset -1px -1px 2px rgba(170, 160, 180, 0.06);
 }
 
 /* ── Reset ── */
