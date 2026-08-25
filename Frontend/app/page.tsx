@@ -205,12 +205,12 @@ function Login({
 const PAGE_SIZES = [25, 50, 100, 500]
 const DEFAULT_VISIBLE_COLUMNS = 6
 
-/* Cycling brand palette for chat bubbles — index-based so each message gets its own color */
+/* Cycling brand palette for chat bubbles — solid matte pastels, index-based */
 const BUBBLE_PALETTE = [
-  /* periwinkle */   { bg: 'rgba(163, 174, 254, 0.20)', border: 'rgba(163, 174, 254, 0.50)', avatarBg: '#e8ebff' },
-  /* lime-green */   { bg: 'rgba(235, 235, 125, 0.28)', border: 'rgba(200, 200, 50,  0.45)', avatarBg: '#f5f5bb' },
-  /* bubblegum */    { bg: 'rgba(255, 190, 240, 0.22)', border: 'rgba(255, 150, 220, 0.45)', avatarBg: '#ffe0f7' },
-  /* deep magenta */ { bg: 'rgba(182,  36, 114, 0.10)', border: 'rgba(182,  36, 114, 0.30)', avatarBg: '#fce4f1' },
+  /* periwinkle */   { bg: '#dde2ff', border: '#c5cbff' },
+  /* lime-green */   { bg: '#f0f0b8', border: '#d8d870' },
+  /* bubblegum */    { bg: '#ffddf8', border: '#ffb8ef' },
+  /* soft magenta */ { bg: '#fce4f1', border: '#e8a0c8' },
 ]
 
 function formatCell(value: any): string {
