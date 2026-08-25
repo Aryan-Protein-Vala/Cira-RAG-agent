@@ -4,7 +4,7 @@ import './globals.css'
 import ParticlesBackground from './ParticlesBackground'
 
 export const metadata: Metadata = {
-  title: 'CIRA — SAP Data Intelligence',
+  title: 'B1 IQ — SAP Data Intelligence',
   description: 'Securely query enterprise SAP data with natural language.',
   generator: 'v0.app',
   icons: {

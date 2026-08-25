@@ -132,7 +132,7 @@ function Login({
       const data = await res.json()
       onLogin(data.user, data.token)
     } catch {
-      setError('Cannot reach the CIRA backend. Is the API running on port 8000?')
+      setError('Cannot reach the B1 IQ backend. Is the API running on port 8000?')
     } finally {
       setBusy(false)
     }
@@ -145,13 +145,13 @@ function Login({
         <div className="login-top">
           <div className="sidebar-brand">
             <BrandMark />
-            <span>CIRA</span>
+            <span>B1 IQ</span>
           </div>
         </div>
         <section className="login-card" aria-labelledby="login-title">
           <div className="login-brand">
             <BrandMark />
-            <span>CIRA</span>
+            <span>B1 IQ</span>
           </div>
           <div className="eyebrow">
             <ShieldCheck size={14} /> INTERNAL DATA ACCESS
@@ -644,7 +644,7 @@ function Sidebar({
       <div className="sidebar-top">
         <button className="sidebar-brand-btn" onClick={collapsed ? onToggle : undefined}>
           <BrandMark />
-          <span className="brand-text">CIRA</span>
+          <span className="brand-text">B1 IQ</span>
         </button>
         <button className="icon-button toggle-btn" onClick={onToggle} aria-label="Toggle sidebar">
           <ChevronLeft size={18} />
@@ -1017,7 +1017,7 @@ export default function Page() {
         patch((m) => ({
           ...m,
           content: m.content || '',
-          error: `Could not reach the CIRA backend (${err?.message ?? 'network error'}). Check that the API is running.`,
+          error: `Could not reach the B1 IQ backend (${err?.message ?? 'network error'}). Check that the API is running.`,
         }))
       }
     } finally {
@@ -1170,7 +1170,7 @@ export default function Page() {
                   <div className="message-avatar">{message.role === 'assistant' ? <BrandMark /> : employeeId.slice(0, 2).toUpperCase()}</div>
                   <div className="message-content">
                     <span className="message-author">
-                      {message.role === 'assistant' ? 'CIRA AI' : 'You'} <small>· {message.timestamp || 'just now'}</small>
+                      {message.role === 'assistant' ? 'B1 IQ' : 'You'} <small>· {message.timestamp || 'just now'}</small>
                     </span>
 
                     {message.role === 'assistant' && !message.content && !message.data && !message.error && isThinking && index === messages.length - 1 ? (
@@ -1283,7 +1283,7 @@ export default function Page() {
                 </button>
               )}
             </div>
-            <p className="composer-note">CIRA reads your ERP read-only. Verify important figures before acting.</p>
+            <p className="composer-note">B1 IQ reads your ERP read-only. Verify important figures before acting.</p>
           </footer>
         </section>
       </main>
