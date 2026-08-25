@@ -80,6 +80,8 @@ class HanaBackend(DataBackend):
             kwargs["sslValidateCertificate"] = config.HANA_VALIDATE_CERT
         if self.schema:
             kwargs["currentSchema"] = self.schema
+        if getattr(config, "HANA_DATABASE_NAME", ""):
+            kwargs["databaseName"] = config.HANA_DATABASE_NAME
         try:
             return dbapi.connect(**kwargs)
         except Exception as exc:
