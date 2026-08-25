@@ -309,7 +309,14 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .message-row { align-items: flex-start; gap: 18px; margin: 30px 0; }
 .message-row.user { flex-direction: row-reverse; }
 .message-avatar .brand-mark { transform: scale(.75); }
-.message-row.user .message-avatar { background: linear-gradient(135deg, var(--pastel-peach), var(--pastel-butter)); }
+/* AI avatar: white with soft periwinkle border */
+.message-row:not(.user) .message-avatar {
+  background: #ffffff;
+  border: 1.5px solid rgba(163, 174, 254, 0.5);
+  box-shadow: 0 2px 8px rgba(163, 174, 254, 0.2);
+}
+/* User avatar: lime + bubblegum gradient */
+.message-row.user .message-avatar { background: linear-gradient(135deg, #EBEB7D, #FFBEF0); }
 .message-content { flex: 1; min-width: 0; }
 .message-row.user .message-content { text-align: right; }
 .message-author { margin-bottom: 10px; }
@@ -318,21 +325,23 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 .bubble { max-width: 760px; color: var(--text-strong); font-size: 12.5px; line-height: 1.55; transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s; }
 
+/* User bubble — periwinkle blue tint */
 .message-row.user .bubble {
   display: inline-block; padding: 12px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(163, 174, 254, 0.45);
   border-radius: 20px 20px 4px 20px;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(163, 174, 254, 0.18);
   box-shadow: var(--shadow-card);
   text-align: left;
 }
 .message-row.user .bubble:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
+/* AI bubble — bubblegum pink tint */
 .message-row:not(.user) .bubble {
   display: inline-block; padding: 12px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(255, 190, 240, 0.5);
   border-radius: 20px 20px 20px 4px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 190, 240, 0.18);
   box-shadow: var(--shadow-card);
 }
 .message-row:not(.user) .bubble:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
