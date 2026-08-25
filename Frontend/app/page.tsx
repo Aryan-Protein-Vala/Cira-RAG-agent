@@ -92,6 +92,26 @@ function BrandMark() {
   )
 }
 
+function B1IQLogo() {
+  return (
+    <svg className="b1iq-logo" viewBox="0 0 110 40" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* B */}
+      <path d="M10 8 V32 M10 8 H18 C22 8 25 10.5 25 14.5 C25 17.5 23 19.5 20 20 M10 20 H20 C24 20 27 22.5 27 26.5 C27 30.5 24 32 20 32 H10" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/>
+      
+      {/* 1 */}
+      <path d="M38 16 L44 9 V32" stroke="var(--primary)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/>
+      
+      {/* i */}
+      <path d="M56 16 V32" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round"/>
+      <circle cx="56" cy="9.5" r="3" fill="var(--primary)"/>
+
+      {/* Q */}
+      <circle cx="80" cy="20" r="11" stroke="currentColor" strokeWidth="4.5"/>
+      <path d="M85 26 L92 33" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
 /* ThemeToggle removed — light-only theme */
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -145,13 +165,13 @@ function Login({
         <div className="login-top">
           <div className="sidebar-brand">
             <BrandMark />
-            <span>B1 IQ</span>
+            <B1IQLogo />
           </div>
         </div>
         <section className="login-card" aria-labelledby="login-title">
           <div className="login-brand">
             <BrandMark />
-            <span>B1 IQ</span>
+            <B1IQLogo />
           </div>
           <div className="eyebrow">
             <ShieldCheck size={14} /> INTERNAL DATA ACCESS
@@ -644,7 +664,9 @@ function Sidebar({
       <div className="sidebar-top">
         <button className="sidebar-brand-btn" onClick={collapsed ? onToggle : undefined}>
           <BrandMark />
-          <span className="brand-text">B1 IQ</span>
+          <div className="brand-text-wrapper" style={{ display: collapsed ? 'none' : 'block', opacity: collapsed ? 0 : 1, transition: 'opacity 0.2s', marginLeft: '6px' }}>
+            <B1IQLogo />
+          </div>
         </button>
         <button className="icon-button toggle-btn" onClick={onToggle} aria-label="Toggle sidebar">
           <ChevronLeft size={18} />
