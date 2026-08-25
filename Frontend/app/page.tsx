@@ -1131,11 +1131,7 @@ export default function Page() {
               </div>
             </div>
             <div className="header-actions">
-              {backendInfo && (
-                <span className={`backend-pill ${backendInfo.simulated ? 'warn' : ''}`} title={`${backendInfo.name} · schema ${backendInfo.schema}`}>
-                  <Database size={12} /> {backendInfo.simulated ? 'Sandbox data' : 'Live SAP'} · {backendInfo.schema}
-                </span>
-              )}
+
               {/* ThemeToggle removed — light only */}
               <button className="secondary-button" onClick={() => selectChat('new', 'New conversation')}>
                 <Plus size={16} /> New chat
