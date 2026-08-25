@@ -738,15 +738,20 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 }
 .robot-face.blush::before { left: 8px; }
 .robot-face.blush::after { right: 8px; }
+.robot-face.surprised i { height: 8px; width: 5px; border-radius: 50%; }
+.robot-face.surprised { box-shadow: inset 2px 4px 6px #c1c7d4; }
+.robot-face.squint i { height: 2px; border-radius: 1px; width: 8px; }
+.robot-face.joy i { height: 4px; width: 8px; border-radius: 50% 50% 0 0; margin-top: -2px; }
 
 /* Chibi Robot Avatar */
-.chibi-robot { position: relative; width: 34px; height: 34px; border-radius: 12px; background: #e9e4e8; display: grid; place-items: center; box-shadow: var(--shadow-raised); transition: all 0.3s; }
-.chibi-robot.speaking { animation: speaking-pulse 1s infinite alternate; }
+.chibi-robot { position: relative; width: 34px; height: 34px; border-radius: 12px; background: var(--bg-card-blue); display: grid; place-items: center; box-shadow: var(--shadow-raised); transition: all 0.3s; animation: chibi-float 3s ease-in-out infinite; }
+.chibi-robot.speaking { animation: speaking-pulse 0.8s infinite alternate; }
 .chibi-robot .antenna-mini { position: absolute; left: 16px; top: -6px; width: 2px; height: 8px; background: #6f7ea8; }
 .chibi-robot .antenna-mini:after { content: ''; position: absolute; top: -3px; left: -2px; width: 6px; height: 6px; border-radius: 50%; background: #7ea4ee; }
 .chibi-robot.speaking .antenna-mini:after { background: #b2f5d9; box-shadow: 0 0 6px #b2f5d9; }
 .robot-face-mini { position: absolute; top: 8px; left: 5px; width: 24px; height: 16px; border-radius: 6px; background: #fff; display: flex; justify-content: space-evenly; align-items: center; box-shadow: inset 1px 1px 2px #c1c7d4; }
-.robot-face-mini i { width: 4px; height: 4px; border-radius: 50%; background: #526793; }
+.robot-face-mini i { width: 5px; height: 3px; border-radius: 50% 50% 0 0; background: #526793; margin-top: -1px; }
 .robot-body-mini { position: absolute; left: 9px; bottom: 4px; display: flex; gap: 3px; }
 .robot-body-mini b { width: 4px; height: 3px; border-radius: 3px; background: #7384b0; }
-@keyframes speaking-pulse { 0% { transform: scale(1); } 100% { transform: scale(1.05); } }
+@keyframes chibi-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes speaking-pulse { 0% { transform: translateY(-1px) scale(1); } 100% { transform: translateY(-2px) scale(1.08); } }

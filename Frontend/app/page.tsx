@@ -597,13 +597,18 @@ function Robot() {
   const [expr, setExpr] = useState('normal')
 
   useEffect(() => {
-    const blinkInterval = setInterval(() => {
-      setExpr(prev => (prev === 'normal' ? 'blink' : prev))
-      setTimeout(() => {
-        setExpr(prev => (prev === 'blink' ? 'normal' : prev))
-      }, 150)
+    const exprInterval = setInterval(() => {
+      // 70% chance to just stay normal/blink quickly, 30% to show a random expression for a bit longer
+      if (Math.random() > 0.3) {
+        setExpr('blink')
+        setTimeout(() => setExpr('normal'), 150)
+      } else {
+        const expressions = ['surprised', 'squint', 'joy']
+        setExpr(expressions[Math.floor(Math.random() * expressions.length)])
+        setTimeout(() => setExpr('normal'), 1200)
+      }
     }, 4000)
-    return () => clearInterval(blinkInterval)
+    return () => clearInterval(exprInterval)
   }, [])
 
   return (
