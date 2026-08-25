@@ -24,6 +24,8 @@ import {
   ShieldCheck,
   Square,
   Trash2,
+  Maximize2,
+  X,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -239,6 +241,7 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
   const [showColumnPicker, setShowColumnPicker] = useState(false)
   const [hidden, setHidden] = useState<string[]>([])
   const [showSql, setShowSql] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   useEffect(() => {
     setHidden(headers.slice(DEFAULT_VISIBLE_COLUMNS))
@@ -335,6 +338,9 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
           ) : null}
           {typeof meta?.elapsedMs === 'number' && <span className="badge">{meta.elapsedMs} ms</span>}
           <span className="row-count">{filteredData.length.toLocaleString()} records</span>
+          <button className="icon-button" style={{ width: 26, height: 26, marginLeft: 8 }} onClick={() => setIsExpanded(true)} aria-label="Expand table">
+            <Maximize2 size={13} />
+          </button>
         </div>
       </div>
 
@@ -471,6 +477,82 @@ function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; m
           <AlertTriangle size={12} /> {meta.warnings.join(' ')}
         </p>
       ) : null}
+      
+      {isExpanded && (
+        <div className="chart-modal-overlay" onClick={() => setIsExpanded(false)}>
+          <div className="chart-modal-content" style={{ display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+            <div className="chart-modal-header" style={{ flexShrink: 0 }}>
+              <h3>{entity ?? 'SAP Data'}</h3>
+              <button className="icon-button" onClick={() => setIsExpanded(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="chart-modal-body" style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="data-toolbar">
+                <div className="data-search">
+                  <Search size={13} />
+                  <input
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value)
+                      setPage(0)
+                    }}
+                    placeholder="Filter records…"
+                  />
+                </div>
+                <div className="data-toolbar-right">
+                  <select
+                    className="mini-select"
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setPage(0)
+                    }}
+                    aria-label="Rows per page"
+                  >
+                    {PAGE_SIZES.map((size) => (
+                      <option key={size} value={size}>
+                        {size} / page
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="data-period" style={{ margin: 0 }}>
+                Showing {displayRows.length.toLocaleString()} of {filteredData.length.toLocaleString()} entries
+                {sortKey ? ` · sorted by ${sortKey} (${sortAsc ? 'ASC' : 'DESC'})` : ''}
+              </p>
+              <div className="mini-table" style={{ flex: 1, maxHeight: 'none' }}>
+                <div className="mini-row mini-head" style={gridStyle}>
+                  {visibleHeaders.map((h) => (
+                    <span key={h} onClick={() => toggleSort(h)} title="Click to sort" className="sortable">
+                      {h} {sortKey === h ? (sortAsc ? '▲' : '▼') : ''}
+                    </span>
+                  ))}
+                </div>
+                {displayRows.map((row, i) => (
+                  <div className="mini-row" key={`exp-${safePage}-${i}`} style={gridStyle}>
+                    {visibleHeaders.map((h) => (
+                      <span key={h} title={formatCell(row?.[h])} className={typeof row?.[h] === 'number' ? 'numeric' : ''}>
+                        {formatCell(row?.[h])}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              {pageCount > 1 && (
+                <div className="pagination">
+                  <button onClick={() => setPage(0)} disabled={safePage === 0}>« First</button>
+                  <button onClick={() => setPage(safePage - 1)} disabled={safePage === 0}>‹ Prev</button>
+                  <span>Page {safePage + 1} of {pageCount}</span>
+                  <button onClick={() => setPage(safePage + 1)} disabled={safePage >= pageCount - 1}>Next ›</button>
+                  <button onClick={() => setPage(pageCount - 1)} disabled={safePage >= pageCount - 1}>Last »</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

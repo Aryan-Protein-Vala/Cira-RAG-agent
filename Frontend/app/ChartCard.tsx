@@ -229,7 +229,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
         </div>
 
         {/* flex: 1 allows the container to stretch and match the data card height */}
-        <div style={{ width: '100%', flex: 1, minHeight: 280 }}>
+        <div style={{ width: '100%', flex: 1, minHeight: 200 }}>
           {renderChart(false)}
         </div>
       </div>
