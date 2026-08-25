@@ -12,23 +12,23 @@
   color-scheme: light;
 
   /* ── Page & Surface Colors (Pastel UI Inspiration) ── */
-  --bg-page:       #f5efed;   /* Warm cream background */
-  --bg-sidebar:    #fbf4fb;   /* White/light cream sidebar instead of purple */
-  --bg-card:       #fbf4fb;   /* Inner white card (top-right) */
-  --bg-card-blue:  #cce3fa;   /* Top-left blue card */
-  --bg-card-lav:   #ebdff8;   /* Bottom-right light purple card */
-  --bg-card-cream: #f6eed9;   /* Middle-right warm yellow/beige card */
-  --bg-card-mint:  #fdf5ef;   /* Input peach/cream color */
-  --bg-card-rose:  #fbb3bc;   /* Sign up button soft pink/rose */
+  --bg-page:       #eaddd7;   /* Warm cream background (darkened) */
+  --bg-sidebar:    #f2e8f1;   /* White/light cream sidebar (darkened) */
+  --bg-card:       #f2e8f1;   /* Inner white card (darkened) */
+  --bg-card-blue:  #a6cbf0;   /* Blue card (darkened) */
+  --bg-card-lav:   #cbafea;   /* Light purple card (darkened) */
+  --bg-card-cream: #e6d6b3;   /* Warm yellow/beige card (darkened) */
+  --bg-card-mint:  #f0ddce;   /* Input peach/cream color (darkened) */
+  --bg-card-rose:  #f28f9c;   /* Sign up button soft pink/rose (darkened) */
   
-  --btn-blue:      #9ecdf6;   /* Search button */
+  --btn-blue:      #72b0e6;   /* Search button (darkened) */
   
-  --bg-input:      #fdf5ef;   /* Email input */
-  --bg-inset:      #f5efed;
+  --bg-input:      #f0ddce;   /* Email input (darkened) */
+  --bg-inset:      #eaddd7;
   
-  --accent-violet: #9ecdf6;
-  --accent-rose:   #fbb3bc;
-  --accent-sky:    #9ecdf6;
+  --accent-violet: #72b0e6;
+  --accent-rose:   #f28f9c;
+  --accent-sky:    #72b0e6;
 
   /* ── Core Design Tokens ── */
   --background:            var(--bg-page);

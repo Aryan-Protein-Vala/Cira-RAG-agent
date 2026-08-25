@@ -227,10 +227,10 @@ const DEFAULT_VISIBLE_COLUMNS = 6
 
 /* Cycling bubble palette — inspired by the pastel UI cards */
 const BUBBLE_PALETTE = [
-  /* light blue card */  { bg: '#c8d8f5', border: 'transparent' },
-  /* soft lavender */    { bg: '#dcd4f0', border: 'transparent' },
-  /* mint card */        { bg: '#c0e8d8', border: 'transparent' },
-  /* rose card */        { bg: '#f5c8d0', border: 'transparent' },
+  /* light blue card */  { bg: '#a7c1f0', border: 'transparent' },
+  /* soft lavender */    { bg: '#beaee6', border: 'transparent' },
+  /* mint card */        { bg: '#9fd4c0', border: 'transparent' },
+  /* rose card */        { bg: '#e8a7b3', border: 'transparent' },
 ]
 
 function formatCell(value: any): string {
