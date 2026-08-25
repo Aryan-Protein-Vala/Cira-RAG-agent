@@ -595,6 +595,7 @@ function Robot() {
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [expr, setExpr] = useState('normal')
+  const [thought, setThought] = useState("Need a hand? I can help you explore your SAP data.")
 
   useEffect(() => {
     const blinkInterval = setInterval(() => {
@@ -609,6 +610,23 @@ function Robot() {
   const handleHover = () => {
     const expressions = ['blush', 'surprised', 'squint', 'joy']
     setExpr(expressions[Math.floor(Math.random() * expressions.length)])
+    
+    const thoughts = [
+      "Need a hand? I can help you explore your SAP data.",
+      "I was built by Cinntra to make your life easier!",
+      "Analyzing ERP tables... just kidding, taking a break!",
+      "Did you know I can query your SAP HANA database in real-time?",
+      "Let's find those open invoices!",
+      "B1 IQ at your service. Powered by Cinntra.",
+      "Just crunching some numbers. Need anything?"
+    ]
+    setThought(thoughts[Math.floor(Math.random() * thoughts.length)])
+    setOpen(true)
+  }
+
+  const handleLeave = () => {
+    setExpr('normal')
+    setOpen(false)
   }
 
   return (
@@ -620,13 +638,12 @@ function Robot() {
       onPointerLeave={() => setDragging(false)}
     >
       <div className={`robot-bubble ${open ? 'show' : ''}`}>
-        Need a hand? I can help you explore your data.
+        {thought}
       </div>
       <button 
         className={`robot ${expr}`}
         onMouseEnter={handleHover}
-        onMouseLeave={() => setExpr('normal')}
-        onClick={() => setOpen(!open)} 
+        onMouseLeave={handleLeave}
         onPointerDown={(e) => {
            if (e.button === 0) setDragging(true)
         }} 
