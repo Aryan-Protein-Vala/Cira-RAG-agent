@@ -113,7 +113,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
   const renderChart = (expanded: boolean) => {
     const shouldHideTicks = !expanded && data.length > 8
     const xAxisProps = expanded 
-      ? { tick: true, angle: -45, textAnchor: 'end', height: 80, interval: 0 as const } 
+      ? { tick: true, angle: -45, textAnchor: 'end' as const, height: 80, interval: 0 as const } 
       : { tick: shouldHideTicks ? false : undefined, height: shouldHideTicks ? 10 : 30 }
 
     return (
