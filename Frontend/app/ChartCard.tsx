@@ -130,17 +130,11 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
       <ResponsiveContainer width="100%" height="100%">
         {activeType === 'bar' ? (
           <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
-            <defs>
-              <linearGradient id={`ciraBarGradient-${expanded ? 'exp' : 'norm'}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#90a8f8" stopOpacity={1} />
-                <stop offset="100%" stopColor="#c0b0f8" stopOpacity={0.7} />
-              </linearGradient>
-            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
             <YAxis {...axisProps} tickFormatter={compact} width={64} />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(144, 168, 248, 0.08)' }} />
-            <Bar dataKey={yKey} fill={`url(#ciraBarGradient-${expanded ? 'exp' : 'norm'})`} radius={[10, 10, 0, 0]} maxBarSize={expanded ? 100 : 64} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(112, 144, 224, 0.08)' }} />
+            <Bar dataKey={yKey} fill="#9ecdf6" radius={[6, 6, 0, 0]} maxBarSize={expanded ? 100 : 64} />
           </BarChart>
         ) : activeType === 'line' ? (
           <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
@@ -151,25 +145,19 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             <Line
               type="monotone"
               dataKey={yKey}
-              stroke="#90a8f8"
+              stroke="#9ecdf6"
               strokeWidth={3}
-              dot={data.length <= (expanded ? 60 : 30) ? { fill: '#90a8f8', r: expanded ? 5 : 3, strokeWidth: 0 } : false}
-              activeDot={{ r: expanded ? 8 : 6, fill: '#f890b8' }}
+              dot={data.length <= (expanded ? 60 : 30) ? { fill: '#9ecdf6', r: expanded ? 5 : 3, strokeWidth: 0 } : false}
+              activeDot={{ r: expanded ? 8 : 6, fill: '#fbb3bc' }}
             />
           </LineChart>
         ) : activeType === 'area' ? (
           <AreaChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
-            <defs>
-              <linearGradient id={`ciraAreaGradient-${expanded ? 'exp' : 'norm'}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#90a8f8" stopOpacity={0.5} />
-                <stop offset="100%" stopColor="#f890b8" stopOpacity={0.04} />
-              </linearGradient>
-            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
             <YAxis {...axisProps} tickFormatter={compact} width={64} />
             <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey={yKey} stroke="#90a8f8" strokeWidth={2.5} fill={`url(#ciraAreaGradient-${expanded ? 'exp' : 'norm'})`} />
+            <Area type="monotone" dataKey={yKey} stroke="#9ecdf6" strokeWidth={2.5} fill="#cce3fa" fillOpacity={0.8} />
           </AreaChart>
         ) : (
           <PieChart>
