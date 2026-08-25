@@ -325,23 +325,21 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 .bubble { max-width: 760px; color: var(--text-strong); font-size: 12.5px; line-height: 1.55; transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s; }
 
-/* User bubble — periwinkle blue tint */
+/* User bubble — color injected by BUBBLE_PALETTE inline style */
 .message-row.user .bubble {
   display: inline-block; padding: 12px 20px;
-  border: 1.5px solid rgba(163, 174, 254, 0.45);
+  border: 1.5px solid transparent;
   border-radius: 20px 20px 4px 20px;
-  background: rgba(163, 174, 254, 0.18);
   box-shadow: var(--shadow-card);
   text-align: left;
 }
 .message-row.user .bubble:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
-/* AI bubble — bubblegum pink tint */
+/* AI bubble — color injected by BUBBLE_PALETTE inline style */
 .message-row:not(.user) .bubble {
   display: inline-block; padding: 12px 20px;
-  border: 1.5px solid rgba(255, 190, 240, 0.5);
+  border: 1.5px solid transparent;
   border-radius: 20px 20px 20px 4px;
-  background: rgba(255, 190, 240, 0.18);
   box-shadow: var(--shadow-card);
 }
 .message-row:not(.user) .bubble:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
