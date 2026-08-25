@@ -711,3 +711,19 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 }
 .mobile-sidebar-backdrop { display: none; }
 @media (max-width: 720px) { .mobile-sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(250, 247, 245, 0.55); z-index: 19; backdrop-filter: blur(3px); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ROBOT DOCK (v0.dev)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.robot-dock { position: fixed; right: 30px; bottom: 84px; z-index: 50; touch-action: none; }
+.robot { position: relative; width: 66px; height: 66px; border: 0; border-radius: 24px; background: #f3b8b7; box-shadow: 7px 8px 15px #bfbac1, -5px -5px 13px #fbf7f9; animation: float 3.2s ease-in-out infinite; cursor: pointer; transition: transform .2s, box-shadow .2s; }
+.robot:active { transform: translateY(2px); box-shadow: 2px 3px 5px #b9b5c0; }
+.antenna { position: absolute; left: 31px; top: -12px; width: 3px; height: 14px; background: #6f7ea8; }
+.antenna:after { content: ''; position: absolute; top: -4px; left: -3px; width: 9px; height: 9px; border-radius: 50%; background: #7ea4ee; }
+.robot-face { position: absolute; top: 15px; left: 10px; width: 46px; height: 29px; border-radius: 12px; background: #e8edf7; display: flex; justify-content: space-evenly; align-items: center; box-shadow: inset 2px 2px 4px #c1c7d4; }
+.robot-face i { width: 7px; height: 7px; border-radius: 50%; background: #526793; }
+.robot-body { position: absolute; left: 17px; bottom: 8px; display: flex; gap: 5px; }
+.robot-body b { width: 7px; height: 5px; border-radius: 5px; background: #7384b0; }
+.robot-bubble { position: absolute; right: 0; bottom: 78px; width: 190px; padding: 12px 14px; border-radius: 14px; background: #f5f1f2; box-shadow: 6px 7px 14px #c4c0c6; color: #626477; font-size: 11px; line-height: 1.5; opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s; }
+.robot-bubble.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+@keyframes float { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(2deg); } }
