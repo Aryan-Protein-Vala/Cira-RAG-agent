@@ -34,16 +34,16 @@ export interface ChartPayload {
   sourceRows?: number
 }
 
-/* Bright pastel palette matching the UI inspiration */
+/* Pastel UI inspiration palette — soft, not saturated */
 const COLORS = [
-  '#90a8f8', /* bright periwinkle blue */
-  '#f890b8', /* bright rose pink */
-  '#90d4b0', /* soft teal/mint */
-  '#f8c870', /* warm golden yellow */
-  '#b890f8', /* soft lavender-purple */
-  '#80d0f0', /* sky blue */
-  '#f8a880', /* peach */
-  '#a8e890', /* lime green */
+  '#7090e0', /* medium blue */
+  '#f07888', /* soft rose */
+  '#50b0a0', /* mint teal */
+  '#f0b840', /* warm gold */
+  '#b890e0', /* soft purple */
+  '#70c0e8', /* sky blue */
+  '#f09060', /* peach */
+  '#80c890', /* sage green */
 ]
 
 const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [

@@ -205,12 +205,12 @@ function Login({
 const PAGE_SIZES = [25, 50, 100, 500]
 const DEFAULT_VISIBLE_COLUMNS = 6
 
-/* Cycling brand palette for chat bubbles — bright cute pastels matching inspiration */
+/* Cycling bubble palette — inspired by the pastel UI cards */
 const BUBBLE_PALETTE = [
-  /* sky blue card */    { bg: '#ccd8f8', border: '#a8b8f0' },
-  /* lavender card */    { bg: '#d8d0f0', border: '#b8a8e8' },
-  /* mint card */        { bg: '#b8e8d8', border: '#88c8b8' },
-  /* rose card */        { bg: '#f8c8d8', border: '#f098b8' },
+  /* light blue card */  { bg: '#c8d8f5', border: 'transparent' },
+  /* soft lavender */    { bg: '#dcd4f0', border: 'transparent' },
+  /* mint card */        { bg: '#c0e8d8', border: 'transparent' },
+  /* rose card */        { bg: '#f5c8d0', border: 'transparent' },
 ]
 
 function formatCell(value: any): string {
