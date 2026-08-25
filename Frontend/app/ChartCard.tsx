@@ -34,7 +34,17 @@ export interface ChartPayload {
   sourceRows?: number
 }
 
-const COLORS = ['#c4b5fd', '#f9a8d4', '#fbbf24', '#86efac', '#93c5fd', '#fda4af', '#a5b4fc', '#fdba74']
+/* Bright pastel palette matching the UI inspiration */
+const COLORS = [
+  '#90a8f8', /* bright periwinkle blue */
+  '#f890b8', /* bright rose pink */
+  '#90d4b0', /* soft teal/mint */
+  '#f8c870', /* warm golden yellow */
+  '#b890f8', /* soft lavender-purple */
+  '#80d0f0', /* sky blue */
+  '#f8a880', /* peach */
+  '#a8e890', /* lime green */
+]
 
 const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [
   { id: 'bar', label: 'Bar', icon: <BarChart3 size={13} /> },
@@ -122,15 +132,15 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
             <defs>
               <linearGradient id={`ciraBarGradient-${expanded ? 'exp' : 'norm'}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#c4b5fd" stopOpacity={0.9} />
-                <stop offset="100%" stopColor="#f9a8d4" stopOpacity={0.45} />
+                <stop offset="0%" stopColor="#90a8f8" stopOpacity={1} />
+                <stop offset="100%" stopColor="#c0b0f8" stopOpacity={0.7} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
             <YAxis {...axisProps} tickFormatter={compact} width={64} />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--secondary)' }} />
-            <Bar dataKey={yKey} fill={`url(#ciraBarGradient-${expanded ? 'exp' : 'norm'})`} radius={[8, 8, 0, 0]} maxBarSize={expanded ? 100 : 64} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(144, 168, 248, 0.08)' }} />
+            <Bar dataKey={yKey} fill={`url(#ciraBarGradient-${expanded ? 'exp' : 'norm'})`} radius={[10, 10, 0, 0]} maxBarSize={expanded ? 100 : 64} />
           </BarChart>
         ) : activeType === 'line' ? (
           <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
@@ -141,25 +151,25 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             <Line
               type="monotone"
               dataKey={yKey}
-              stroke="#a78bfa"
+              stroke="#90a8f8"
               strokeWidth={3}
-              dot={data.length <= (expanded ? 60 : 30) ? { fill: '#a78bfa', r: expanded ? 5 : 3 } : false}
-              activeDot={{ r: expanded ? 8 : 6 }}
+              dot={data.length <= (expanded ? 60 : 30) ? { fill: '#90a8f8', r: expanded ? 5 : 3, strokeWidth: 0 } : false}
+              activeDot={{ r: expanded ? 8 : 6, fill: '#f890b8' }}
             />
           </LineChart>
         ) : activeType === 'area' ? (
           <AreaChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 24 }}>
             <defs>
               <linearGradient id={`ciraAreaGradient-${expanded ? 'exp' : 'norm'}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#c4b5fd" stopOpacity={0.6} />
-                <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0.05} />
+                <stop offset="0%" stopColor="#90a8f8" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="#f890b8" stopOpacity={0.04} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
             <YAxis {...axisProps} tickFormatter={compact} width={64} />
             <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey={yKey} stroke="#a78bfa" strokeWidth={2} fill={`url(#ciraAreaGradient-${expanded ? 'exp' : 'norm'})`} />
+            <Area type="monotone" dataKey={yKey} stroke="#90a8f8" strokeWidth={2.5} fill={`url(#ciraAreaGradient-${expanded ? 'exp' : 'norm'})`} />
           </AreaChart>
         ) : (
           <PieChart>

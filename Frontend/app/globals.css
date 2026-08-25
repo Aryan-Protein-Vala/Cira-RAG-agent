@@ -17,25 +17,25 @@
   --brand-magenta:    #B62472;
   --brand-bubblegum:  #FFBEF0;
 
-  /* ── Solid Pastel Surfaces ── */
-  --bg-page:      #f4f6ff;   /* very light periwinkle-white page */
-  --bg-sidebar:   #eceffe;   /* light periwinkle sidebar */
-  --bg-card:      #ffffff;   /* white cards stand out from page */
-  --bg-input:     #f0f3ff;   /* light input fields */
-  --bg-inset:     #eaeeff;   /* recessed areas / table rows */
-  --bg-cream:     #f4f6ff;
-  --bg-warm:      #f4f6ff;
+  /* ── Solid Pastel Surfaces (Pastel UI inspiration) ── */
+  --bg-page:      #f8f6ff;   /* very light lavender-white */
+  --bg-sidebar:   #e8e0f8;   /* medium lavender */
+  --bg-card:      #ffffff;   /* white cards pop */
+  --bg-input:     #eeeaff;   /* input fields */
+  --bg-inset:     #ede8ff;   /* table insets */
+  --bg-cream:     #f8f6ff;
+  --bg-warm:      #f8f6ff;
 
-  --pastel-lavender:  #c5cbff;
-  --pastel-rose:      #ffc8f4;
-  --pastel-peach:     #ffc8f4;
-  --pastel-mint:      #e8e86a;
-  --pastel-sky:       #d4d8ff;
-  --pastel-butter:    #e8e86a;
+  --pastel-lavender:  #b8c0f8;
+  --pastel-rose:      #f8b0d0;
+  --pastel-peach:     #f8b0d0;
+  --pastel-mint:      #90d4b0;
+  --pastel-sky:       #a0c8f8;
+  --pastel-butter:    #f8d890;
 
-  --accent-violet:    #6b7bef;
-  --accent-rose:      #B62472;
-  --accent-sky:       #A3AEFE;
+  --accent-violet:    #7888f0;   /* brighter periwinkle */
+  --accent-rose:      #f87098;   /* brighter rose */
+  --accent-sky:       #80b8f8;
 
   /* ── Core Design Tokens ── */
   --background:            var(--bg-page);
@@ -62,34 +62,31 @@
   /* ── Surfaces ── */
   --surface:       #ffffff;
   --surface-strong:#ffffff;
-  --surface-line:  rgba(100, 110, 200, 0.1);
-  --text-strong:   #1e1e2e;
-  --text-soft:     rgba(30, 30, 46, 0.5);
-  --chart-axis:    rgba(30, 30, 46, 0.4);
-  --chart-grid:    rgba(100, 110, 200, 0.06);
-  --film:          #f4f6ff;
+  --surface-line:  rgba(120, 136, 240, 0.1);
+  --text-strong:   #2d2850;   /* deep blue-purple, not harsh black */
+  --text-soft:     rgba(45, 40, 80, 0.5);
+  --chart-axis:    rgba(45, 40, 80, 0.4);
+  --chart-grid:    rgba(120, 136, 240, 0.08);
+  --film:          #f8f6ff;
 
-  /* ── 3D Neumorphic Shadows (STRONG — periwinkle-toned) ── */
-  /* Raised: bottom-right dark, top-left white highlight */
+  /* ── 3D Neumorphic Shadows (cute + strong) ── */
   --shadow-raised:
-    5px 5px 12px rgba(100, 110, 210, 0.22),
+    5px 5px 12px rgba(120, 120, 220, 0.2),
     -3px -3px 8px rgba(255, 255, 255, 1);
   --shadow-raised-hover:
-    7px 7px 18px rgba(100, 110, 210, 0.28),
+    7px 7px 18px rgba(120, 120, 220, 0.26),
     -4px -4px 10px rgba(255, 255, 255, 1);
-  /* Pressed inset */
   --shadow-inset:
-    inset 4px 4px 10px rgba(100, 110, 210, 0.18),
-    inset -3px -3px 8px rgba(255, 255, 255, 0.95);
-  /* Card: elevated panel */
+    inset 4px 4px 10px rgba(120, 120, 220, 0.16),
+    inset -3px -3px 8px rgba(255, 255, 255, 1);
   --shadow-card:
-    8px 8px 20px rgba(100, 110, 210, 0.2),
+    8px 8px 22px rgba(120, 120, 220, 0.18),
     -5px -5px 14px rgba(255, 255, 255, 1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --shadow-card-hover:
-    12px 12px 28px rgba(100, 110, 210, 0.26),
-    -6px -6px 18px rgba(255, 255, 255, 1),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --shadow-card-hover:
+    12px 12px 28px rgba(120, 120, 220, 0.24),
+    -7px -7px 18px rgba(255, 255, 255, 1),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 
 /* ── Reset ── */
@@ -141,15 +138,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
    SIDEBAR
    ═══════════════════════════════════════════════════════════════════════════ */
 .sidebar {
-  height: calc(100vh - 20px); margin: 10px; margin-right: 0; border-radius: 20px;
+  height: calc(100vh - 20px); margin: 10px; margin-right: 0; border-radius: 24px;
   width: 260px; display: flex; flex-direction: column;
   padding: 20px 14px 14px;
   background: var(--bg-sidebar);
-  border: 1px solid rgba(163, 174, 254, 0.2);
+  border: 1px solid rgba(184, 192, 248, 0.35);
   box-shadow: var(--shadow-card);
   transition: width .3s cubic-bezier(0.16, 1, 0.3, 1), padding .3s;
   flex-shrink: 0; z-index: 2;
-  /* NO backdrop-filter — solid matte */
 }
 .sidebar.collapsed { width: 56px; align-items: center; padding-left: 0; padding-right: 0; padding-top: 20px; }
 
@@ -310,9 +306,9 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .chat-intro { display: flex; gap: 20px; margin-bottom: 60px; }
 .intro-icon {
   width: 44px; height: 44px; display: grid; place-items: center;
-  border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 16px;
-  background: linear-gradient(135deg, var(--pastel-lavender), var(--pastel-rose));
-  color: var(--accent-violet);
+  border: 2px solid rgba(184, 192, 248, 0.4); border-radius: 18px;
+  background: linear-gradient(135deg, #b8c0f8, #f8b0d0);
+  color: #ffffff;
   box-shadow: var(--shadow-raised);
 }
 .chat-intro h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: var(--text-strong); }
@@ -369,7 +365,7 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .data-card {
   display: flex; flex-direction: column;
   width: min(640px, 100%); margin-top: 14px; padding: 16px;
-  border: 1px solid rgba(163, 174, 254, 0.2); border-radius: 20px;
+  border: 1.5px solid rgba(184, 192, 248, 0.3); border-radius: 24px;
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s;
@@ -384,14 +380,14 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 
 .mini-table {
   flex: 1;
-  border-radius: 14px; overflow: hidden;
+  border-radius: 16px; overflow: hidden;
   background: var(--bg-inset);
   box-shadow: var(--shadow-inset);
   max-height: 420px; overflow-y: auto;
 }
-.mini-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; padding: 7px 12px; border-bottom: 1px solid rgba(163, 174, 254, 0.1); color: var(--text-soft); font-size: 11px; }
+.mini-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; padding: 7px 12px; border-bottom: 1px solid rgba(184, 192, 248, 0.15); color: var(--text-soft); font-size: 11px; }
 .mini-row:last-child { border-bottom: 0; }
-.mini-head { position: sticky; top: 0; z-index: 1; color: var(--text-strong); background: #dde2ff; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.mini-head { position: sticky; top: 0; z-index: 1; color: #4858c8; background: #d4d8f8; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
 .mini-row .sortable { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .mini-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: 0.2s ease; }
 .mini-row span:hover {
@@ -424,8 +420,8 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 /* ── Chart card ── */
 .chart-card {
   display: flex; flex-direction: column;
-  width: min(720px, 100%); margin-top: 14px; padding: 16px; border-radius: 20px;
-  background: var(--bg-card); border: 1px solid rgba(163, 174, 254, 0.2);
+  width: min(720px, 100%); margin-top: 14px; padding: 16px; border-radius: 24px;
+  background: var(--bg-card); border: 1.5px solid rgba(184, 192, 248, 0.3);
   box-shadow: var(--shadow-card);
   transition: transform 0.25s, box-shadow 0.25s;
 }
@@ -448,12 +444,12 @@ button.avatar:hover { transform: scale(1.1); box-shadow: var(--shadow-raised-hov
 .chart-switcher button.active { background: rgba(167, 139, 250, 0.15); color: var(--accent-violet); box-shadow: var(--shadow-raised); }
 
 .chart-tooltip {
-  background: rgba(255, 255, 255, 0.95); border: 1px solid rgba(61, 48, 65, 0.1);
-  border-radius: 14px; padding: 10px 14px; color: var(--text-strong);
+  background: #ffffff; border: 1.5px solid rgba(184, 192, 248, 0.4);
+  border-radius: 16px; padding: 10px 14px; color: var(--text-strong);
   font-size: 12px; box-shadow: var(--shadow-card);
 }
-.chart-tooltip-label { margin: 0 0 4px; font-weight: 600; color: var(--text-soft); }
-.chart-tooltip-value { margin: 0; font-weight: 700; color: var(--accent-violet); }
+.chart-tooltip-label { margin: 0 0 4px; font-weight: 600; color: var(--text-soft); font-size: 11px; }
+.chart-tooltip-value { margin: 0; font-weight: 700; color: #7888f0; }
 .chart-legend-label { color: var(--text-soft); font-size: 11px; }
 
 /* Modal */
