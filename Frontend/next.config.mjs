@@ -8,7 +8,7 @@ const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || 'http://127.0.0.1:8000'
 
 const nextConfig = {
   // Cross-origin dev requests (remote preview hosts, RDP over hostname, ...)
-  allowedDevOrigins: ['*.e2b.app', '*.local', '*.localhost', '*.trycloudflare.com'],
+  allowedDevOrigins: ['*.e2b.app', '*.local', '*.localhost'],
 
   images: {
     unoptimized: true,

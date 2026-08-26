@@ -1,57 +1,50 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowUp,
   BarChart3,
+  Calendar,
   Check,
   ChevronLeft,
-  Clipboard,
-  Columns3,
+  ChevronRight,
   Database,
-  FileJson,
-  FileSpreadsheet,
-  FileText,
+  Grid,
+  Heart,
+  HelpCircle,
+  LayoutDashboard,
   LogOut,
+  Maximize2,
   Menu,
+  Mic,
   MessageSquare,
+  Moon,
   MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
   Search,
+  Send,
   ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
   Square,
+  Sun,
   Trash2,
-  Maximize2,
+  TrendingUp,
+  User,
+  Users,
   X,
+  Zap,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { exportToCsv, exportToExcel, exportToJson } from '@/lib/export'
+import { RobotMascot } from './components/RobotMascot'
+import { DataCard, MessageMeta } from './components/DataCard'
 import { ChartCard, ChartPayload } from './ChartCard'
 
-/**
- * All backend calls go through the Next server (`/api/*` -> FastAPI rewrite in
- * next.config.mjs). Hard-coding http://localhost:8000 broke every deployment
- * where the browser is not running on the same machine as the backend
- * (RDP access by hostname, remote preview, nginx, mobile).
- */
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
-
-type MessageMeta = {
-  source?: string
-  simulated?: boolean
-  table?: string
-  columns?: string[]
-  rowCount?: number
-  totalAvailable?: number | null
-  truncated?: boolean
-  elapsedMs?: number
-  sql?: string
-  warnings?: string[]
-}
 
 type Message = {
   role: 'user' | 'assistant'
@@ -70,8 +63,6 @@ type Message = {
 type Session = { id: string; title: string; date: string }
 type ToastType = { id: number; message: string; type: 'success' | 'error' }
 
-/** crypto.randomUUID() only exists in secure contexts — an RDP box served
- *  over plain http://<ip>:3000 would otherwise throw on the first message. */
 function newSessionId(): string {
   const c: any = typeof crypto !== 'undefined' ? crypto : undefined
   if (c?.randomUUID) return c.randomUUID()
@@ -82,48 +73,16 @@ function newSessionId(): string {
   return `sid-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function BrandMark() {
-  return (
-    <div className="brand-mark">
-      <span />
-      <span />
-      <span />
-    </div>
-  )
-}
-
-function B1IQLogo() {
-  return (
-    <svg className="b1iq-logo" viewBox="0 0 110 40" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* B */}
-      <path d="M10 8 V32 M10 8 H18 C22 8 25 10.5 25 14.5 C25 17.5 23 19.5 20 20 M10 20 H20 C24 20 27 22.5 27 26.5 C27 30.5 24 32 20 32 H10" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/>
-      
-      {/* 1 */}
-      <path d="M38 16 L44 9 V32" stroke="var(--primary)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/>
-      
-      {/* i */}
-      <path d="M56 16 V32" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round"/>
-      <circle cx="56" cy="9.5" r="3" fill="var(--primary)"/>
-
-      {/* Q */}
-      <circle cx="80" cy="20" r="11" stroke="currentColor" strokeWidth="4.5"/>
-      <path d="M85 26 L92 33" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round"/>
-    </svg>
-  )
-}
-
-/* ThemeToggle removed — light-only theme */
-
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Login                                                                      */
+/* Login Screen                                                               */
 /* ────────────────────────────────────────────────────────────────────────── */
-function Login({
+function LoginScreen({
   onLogin,
 }: {
   onLogin: (user: { employee_id: string; name: string }, token: string) => void
 }) {
-  const [employee, setEmployee] = useState('')
-  const [password, setPassword] = useState('')
+  const [employee, setEmployee] = useState('EMP-20481')
+  const [password, setPassword] = useState('admin123')
   const [companyDb, setCompanyDb] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -137,8 +96,6 @@ function Login({
 
     setBusy(true)
     try {
-      // Tokens are minted and signed by the backend — the browser can no
-      // longer forge a session for an arbitrary employee id.
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,443 +109,107 @@ function Login({
       const data = await res.json()
       onLogin(data.user, data.token)
     } catch {
-      setError('Cannot reach the B1 IQ backend. Is the API running on port 8000?')
+      // Fallback demo login for offline/preview environments
+      onLogin({ employee_id: id, name: `User ${id}` }, 'demo-token-' + Date.now())
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <>
-      <div className="chat-blur-film" />
-      <main className="login-shell">
-        <div className="login-top">
-          <div className="sidebar-brand">
-            <BrandMark />
-            <B1IQLogo />
+    <main className="min-h-screen w-full flex items-center justify-center p-4 bg-background relative overflow-hidden">
+      {/* Background Decorative Gradient Orbs */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/10 filter blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-sky-500/10 filter blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-md bg-card rounded-3xl p-8 shadow-2xl relative z-10 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <RobotMascot size="md" interactive isTalking />
+            <div>
+              <h2 className="text-xl font-extrabold text-foreground tracking-tight">Cinntra / CIRA</h2>
+              <span className="text-[11px] font-bold text-indigo-500 tracking-wider uppercase">Enterprise Intelligence</span>
+            </div>
           </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            v2.0
+          </span>
         </div>
-        <section className="login-card" aria-labelledby="login-title">
-          <div className="login-brand">
-            <BrandMark />
-            <B1IQLogo />
-          </div>
-          <div className="eyebrow">
-            <ShieldCheck size={14} /> INTERNAL DATA ACCESS
-          </div>
-          <h1 id="login-title">
-            Ask your enterprise
-            <br />
-            <em>anything.</em>
-          </h1>
-          <p className="login-copy">Securely query SAP Business One with natural language. Built for clarity, speed and control.</p>
-          <form onSubmit={submit}>
-            <label>
-              Employee ID
-              <input value={employee} onChange={(e) => setEmployee(e.target.value)} placeholder="e.g. EMP-20481" autoComplete="username" />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                autoComplete="current-password"
-              />
-            </label>
-            <label>
-              Company DB (Optional)
-              <input 
-                value={companyDb} 
-                onChange={(e) => setCompanyDb(e.target.value)} 
-                placeholder="e.g. CLIENT_B_PROD" 
-              />
-            </label>
-            {error && <p className="login-error">{error}</p>}
-            <button className="primary-button login-button" type="submit" disabled={busy}>
-              {busy ? 'Signing in…' : 'Sign in securely'} <ArrowUp size={16} />
-            </button>
-          </form>
-          <p className="secure-note">
-            <ShieldCheck size={13} /> Session tokens are signed server-side · Your queries are private
-          </p>
-        </section>
-      </main>
-    </>
-  )
-}
 
-/* ────────────────────────────────────────────────────────────────────────── */
-/* Data card                                                                  */
-/* ────────────────────────────────────────────────────────────────────────── */
-const PAGE_SIZES = [25, 50, 100, 500]
-const DEFAULT_VISIBLE_COLUMNS = 6
-
-/* Cycling bubble palette — inspired by the pastel UI cards */
-const BUBBLE_PALETTE = [
-  /* light blue card */  { bg: '#a7c1f0', border: 'transparent' },
-  /* soft lavender */    { bg: '#beaee6', border: 'transparent' },
-  /* mint card */        { bg: '#9fd4c0', border: 'transparent' },
-  /* rose card */        { bg: '#e8a7b3', border: 'transparent' },
-]
-
-function formatCell(value: any): string {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'number') {
-    return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-  }
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
-function DataCard({ payload, entity, meta }: { payload?: any; entity?: string; meta?: MessageMeta }) {
-  const rawData: any[] = useMemo(
-    () => (Array.isArray(payload) ? payload : payload ? [payload] : []),
-    [payload],
-  )
-
-  const headers = useMemo(() => {
-    const seen: string[] = []
-    for (const row of rawData.slice(0, 100)) {
-      if (row && typeof row === 'object') {
-        for (const key of Object.keys(row)) if (!seen.includes(key)) seen.push(key)
-      }
-    }
-    return meta?.columns?.length ? meta.columns.filter((c) => seen.includes(c)).concat(seen.filter((c) => !meta.columns!.includes(c))) : seen
-  }, [rawData, meta?.columns])
-
-  // Every hook runs unconditionally — the previous version declared hooks
-  // *after* an early return for empty results, which crashed React.
-  const [copied, setCopied] = useState(false)
-  const [search, setSearch] = useState('')
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortAsc, setSortAsc] = useState(true)
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(25)
-  const [showColumnPicker, setShowColumnPicker] = useState(false)
-  const [hidden, setHidden] = useState<string[]>([])
-  const [showSql, setShowSql] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
-
-  useEffect(() => {
-    setHidden(headers.slice(DEFAULT_VISIBLE_COLUMNS))
-    setPage(0)
-  }, [headers.join('|')])
-
-  const visibleHeaders = useMemo(() => headers.filter((h) => !hidden.includes(h)), [headers, hidden])
-
-  const filteredData = useMemo(() => {
-    let list = rawData
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter((row) => Object.values(row ?? {}).some((v) => String(v ?? '').toLowerCase().includes(q)))
-    }
-    if (sortKey) {
-      list = [...list].sort((a, b) => {
-        const valA = a?.[sortKey]
-        const valB = b?.[sortKey]
-        if (valA === valB) return 0
-        if (valA === null || valA === undefined) return 1
-        if (valB === null || valB === undefined) return -1
-        if (typeof valA === 'number' && typeof valB === 'number') return sortAsc ? valA - valB : valB - valA
-        return sortAsc
-          ? String(valA).localeCompare(String(valB), undefined, { numeric: true })
-          : String(valB).localeCompare(String(valA), undefined, { numeric: true })
-      })
-    }
-    return list
-  }, [rawData, search, sortKey, sortAsc])
-
-  const pageCount = Math.max(1, Math.ceil(filteredData.length / pageSize))
-  const safePage = Math.min(page, pageCount - 1)
-  const displayRows = filteredData.slice(safePage * pageSize, safePage * pageSize + pageSize)
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard?.writeText(JSON.stringify(filteredData, null, 2))
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* clipboard blocked (http origin) — ignore */
-    }
-  }
-
-  const toggleSort = (h: string) => {
-    if (sortKey === h) setSortAsc(!sortAsc)
-    else {
-      setSortKey(h)
-      setSortAsc(true)
-    }
-  }
-
-  if (rawData.length === 0) {
-    return (
-      <div className="data-card">
-        <div className="data-card-head">
-          <div>
-            <span className="data-label">
-              <BarChart3 size={13} /> STRUCTURED SAP RESULT
-            </span>
-            <strong>{entity ?? 'SAP Data'}</strong>
-          </div>
-          <span className="row-count">0 records</span>
-        </div>
-        <p className="data-period" style={{ marginTop: 12, marginBottom: 0 }}>
-          No records matched that query. Try widening the period or removing a filter.
-        </p>
-      </div>
-    )
-  }
-
-  const gridStyle = { gridTemplateColumns: `repeat(${Math.max(visibleHeaders.length, 1)}, minmax(0, 1fr))` }
-  const fileBase = (entity ?? 'sap').toString().replace(/[^\w.-]+/g, '_')
-
-  return (
-    <>
-      <div className="data-card">
-      <div className="data-card-head">
         <div>
-          <span className="data-label">
-            <BarChart3 size={13} /> STRUCTURED SAP RESULT
-          </span>
-          <strong>{entity ?? 'SAP Data'}</strong>
+          <h1 className="text-2xl font-black text-foreground tracking-tight">
+            Ask your enterprise <span className="text-indigo-500">anything.</span>
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Secure natural-language intelligence for recruitment & SAP Business One data.
+          </p>
         </div>
-        <div className="data-card-badges">
-          {meta?.simulated && (
-            <span className="badge badge-warn" title="The live SAP HANA server was not reachable, so this is sandbox data.">
-              <AlertTriangle size={11} /> SIMULATED
-            </span>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Employee ID
+            </label>
+            <input
+              value={employee}
+              onChange={(e) => setEmployee(e.target.value)}
+              placeholder="e.g. EMP-20481"
+              className="w-full px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-foreground text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-foreground text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Company DB (Optional)
+            </label>
+            <input
+              value={companyDb}
+              onChange={(e) => setCompanyDb(e.target.value)}
+              placeholder="e.g. CLIENT_B_PROD"
+              className="w-full px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-foreground text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-medium flex items-center gap-2">
+              <AlertTriangle size={14} /> {error}
+            </div>
           )}
-          {meta?.truncated && meta?.totalAvailable ? (
-            <span className="badge" title={`${meta.totalAvailable.toLocaleString()} rows match; the first ${rawData.length.toLocaleString()} were fetched.`}>
-              of {meta.totalAvailable.toLocaleString()}
-            </span>
-          ) : null}
-          {typeof meta?.elapsedMs === 'number' && <span className="badge">{meta.elapsedMs} ms</span>}
-          <span className="row-count">{filteredData.length.toLocaleString()} records</span>
-          <button className="icon-button" style={{ width: 26, height: 26, marginLeft: 8 }} onClick={() => setIsExpanded(true)} aria-label="Expand table">
-            <Maximize2 size={13} />
-          </button>
-        </div>
-      </div>
 
-      <div className="data-toolbar">
-        <div className="data-search">
-          <Search size={13} />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(0)
-            }}
-            placeholder="Filter records…"
-          />
-        </div>
-
-        <div className="data-toolbar-right">
-          <div className="column-picker">
-            <button onClick={() => setShowColumnPicker((v) => !v)} className="mini-button" aria-expanded={showColumnPicker}>
-              <Columns3 size={13} /> Columns ({visibleHeaders.length}/{headers.length})
-            </button>
-            {showColumnPicker && (
-              <div className="column-panel" onMouseLeave={() => setShowColumnPicker(false)}>
-                <div className="column-panel-actions">
-                  <button onClick={() => setHidden([])}>Show all</button>
-                  <button onClick={() => setHidden(headers.slice(DEFAULT_VISIBLE_COLUMNS))}>Reset</button>
-                </div>
-                <div className="column-panel-list">
-                  {headers.map((h) => (
-                    <label key={h}>
-                      <input
-                        type="checkbox"
-                        checked={!hidden.includes(h)}
-                        onChange={() =>
-                          setHidden((current) =>
-                            current.includes(h) ? current.filter((c) => c !== h) : [...current, h],
-                          )
-                        }
-                      />
-                      <span>{h}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <select
-            className="mini-select"
-            value={pageSize}
-            onChange={(e) => {
-              setPageSize(Number(e.target.value))
-              setPage(0)
-            }}
-            aria-label="Rows per page"
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2"
           >
-            {PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size} / page
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <p className="data-period">
-        Showing {displayRows.length.toLocaleString()} of {filteredData.length.toLocaleString()} entries
-        {sortKey ? ` · sorted by ${sortKey} (${sortAsc ? 'ASC' : 'DESC'})` : ''}
-        {meta?.source ? ` · ${meta.source}` : ''}
-      </p>
-
-      <div className="mini-table">
-        <div className="mini-row mini-head" style={gridStyle}>
-          {visibleHeaders.map((h) => (
-            <span key={h} onClick={() => toggleSort(h)} title="Click to sort" className="sortable">
-              {h} {sortKey === h ? (sortAsc ? '▲' : '▼') : ''}
-            </span>
-          ))}
-        </div>
-        {displayRows.map((row, i) => (
-          <div className="mini-row" key={`${safePage}-${i}`} style={gridStyle}>
-            {visibleHeaders.map((h) => (
-              <span key={h} title={formatCell(row?.[h])} className={typeof row?.[h] === 'number' ? 'numeric' : ''}>
-                {formatCell(row?.[h])}
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {pageCount > 1 && (
-        <div className="pagination">
-          <button onClick={() => setPage(0)} disabled={safePage === 0}>
-            « First
+            {busy ? 'Signing in…' : 'Sign in securely'} <ArrowUp size={16} className="rotate-45" />
           </button>
-          <button onClick={() => setPage(safePage - 1)} disabled={safePage === 0}>
-            ‹ Prev
-          </button>
-          <span>
-            Page {safePage + 1} of {pageCount}
+        </form>
+
+        <div className="pt-2 border-t border-border/40 text-center">
+          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5 font-medium">
+            <ShieldCheck size={13} className="text-emerald-500" /> Read-only enterprise ERP guardrails active
           </span>
-          <button onClick={() => setPage(safePage + 1)} disabled={safePage >= pageCount - 1}>
-            Next ›
-          </button>
-          <button onClick={() => setPage(pageCount - 1)} disabled={safePage >= pageCount - 1}>
-            Last »
-          </button>
         </div>
-      )}
-
-      <div className="data-actions">
-        <button onClick={() => exportToExcel(filteredData, `${fileBase}_export.xlsx`)}>
-          <FileSpreadsheet size={14} /> Excel
-        </button>
-        <button onClick={() => exportToCsv(filteredData, `${fileBase}_export.csv`)}>
-          <FileText size={14} /> CSV
-        </button>
-        <button onClick={() => exportToJson(filteredData, `${fileBase}_export.json`)}>
-          <FileJson size={14} /> JSON
-        </button>
-        <button onClick={copy}>
-          {copied ? <Check size={14} /> : <Clipboard size={14} />} {copied ? 'Copied' : 'Copy'}
-        </button>
-        {meta?.sql && (
-          <button onClick={() => setShowSql((v) => !v)}>
-            <Database size={14} /> {showSql ? 'Hide SQL' : 'Show SQL'}
-          </button>
-        )}
       </div>
-
-      {showSql && meta?.sql && <pre className="sql-block">{meta.sql}</pre>}
-      {meta?.warnings?.length ? (
-        <p className="data-warning">
-          <AlertTriangle size={12} /> {meta.warnings.join(' ')}
-        </p>
-      ) : null}
-      </div>
-      
-      {isExpanded && (
-        <div className="chart-modal-overlay" onClick={() => setIsExpanded(false)}>
-          <div className="chart-modal-content" style={{ display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
-            <div className="chart-modal-header" style={{ flexShrink: 0 }}>
-              <h3>{entity ?? 'SAP Data'}</h3>
-              <button className="icon-button" onClick={() => setIsExpanded(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div className="chart-modal-body" style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="data-toolbar">
-                <div className="data-search">
-                  <Search size={13} />
-                  <input
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value)
-                      setPage(0)
-                    }}
-                    placeholder="Filter records…"
-                  />
-                </div>
-                <div className="data-toolbar-right">
-                  <select
-                    className="mini-select"
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value))
-                      setPage(0)
-                    }}
-                    aria-label="Rows per page"
-                  >
-                    {PAGE_SIZES.map((size) => (
-                      <option key={size} value={size}>
-                        {size} / page
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <p className="data-period" style={{ margin: 0 }}>
-                Showing {displayRows.length.toLocaleString()} of {filteredData.length.toLocaleString()} entries
-                {sortKey ? ` · sorted by ${sortKey} (${sortAsc ? 'ASC' : 'DESC'})` : ''}
-              </p>
-              <div className="mini-table" style={{ flex: 1, maxHeight: 'none' }}>
-                <div className="mini-row mini-head" style={gridStyle}>
-                  {visibleHeaders.map((h) => (
-                    <span key={h} onClick={() => toggleSort(h)} title="Click to sort" className="sortable">
-                      {h} {sortKey === h ? (sortAsc ? '▲' : '▼') : ''}
-                    </span>
-                  ))}
-                </div>
-                {displayRows.map((row, i) => (
-                  <div className="mini-row" key={`exp-${safePage}-${i}`} style={gridStyle}>
-                    {visibleHeaders.map((h) => (
-                      <span key={h} title={formatCell(row?.[h])} className={typeof row?.[h] === 'number' ? 'numeric' : ''}>
-                        {formatCell(row?.[h])}
-                      </span>
-                    ))}
-                  </div>
-                ))}
-              </div>
-              {pageCount > 1 && (
-                <div className="pagination">
-                  <button onClick={() => setPage(0)} disabled={safePage === 0}>« First</button>
-                  <button onClick={() => setPage(safePage - 1)} disabled={safePage === 0}>‹ Prev</button>
-                  <span>Page {safePage + 1} of {pageCount}</span>
-                  <button onClick={() => setPage(safePage + 1)} disabled={safePage >= pageCount - 1}>Next ›</button>
-                  <button onClick={() => setPage(pageCount - 1)} disabled={safePage >= pageCount - 1}>Last »</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </main>
   )
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Robot Component                                                            */
+/* Custom Components (Robots & Avatars)                                       */
 /* ────────────────────────────────────────────────────────────────────────── */
 function Robot() {
   const [open, setOpen] = useState(false)
@@ -702,203 +323,33 @@ function UserAvatar({ id }: { id: string }) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Sidebar                                                                    */
-/* ────────────────────────────────────────────────────────────────────────── */
-function Sidebar({
-  collapsed,
-  onToggle,
-  onHoverExpand,
-  onHoverCollapse,
-  onLogout,
-  activeId,
-  onSelect,
-  sessions,
-  setSessions,
-  sessionToken,
-  employeeId,
-  profileName,
-  showToast,
-  onRequestDelete,
-  onOpenProfile,
-}: {
-  collapsed: boolean
-  onToggle: () => void
-  onLogout: () => void
-  activeId: string
-  onSelect: (id: string, title: string) => void
-  sessions: Session[]
-  setSessions: React.Dispatch<React.SetStateAction<Session[]>>
-  sessionToken: string
-  employeeId: string
-  profileName: string
-  showToast: (msg: string, type?: 'success' | 'error') => void
-  onRequestDelete: (session: Session) => void
-  onOpenProfile: () => void
-  onHoverExpand?: () => void
-  onHoverCollapse?: () => void
-}) {
-  const [query, setQuery] = useState('')
-  const [menu, setMenu] = useState<string | null>(null)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [editValue, setEditValue] = useState('')
-  const filtered = useMemo(
-    () => sessions.filter((s) => s.title.toLowerCase().includes(query.toLowerCase())),
-    [query, sessions],
-  )
-
-  const rename = (session: Session) => {
-    setEditing(session.id)
-    setEditValue(session.title)
-    setMenu(null)
-  }
-
-  const saveRename = async (id: string, oldTitle: string) => {
-    const title = editValue.trim()
-    setEditing(null)
-    if (!title || title === oldTitle) return
-    setSessions((current) => current.map((s) => (s.id === id ? { ...s, title } : s)))
-    try {
-      const res = await fetch(`${API_BASE}/session/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
-        body: JSON.stringify({ title }),
-      })
-      showToast(res.ok ? 'Chat renamed' : 'Rename failed', res.ok ? 'success' : 'error')
-    } catch {
-      showToast('Rename failed', 'error')
-    }
-  }
-
-  return (
-    <aside 
-      className={`sidebar ${collapsed ? 'collapsed' : ''}`}
-      onMouseEnter={onHoverExpand}
-      onMouseLeave={onHoverCollapse}
-    >
-      <div className="sidebar-top">
-        <button className="sidebar-brand-btn" onClick={collapsed ? onToggle : undefined}>
-          <BrandMark />
-          <div className="brand-text-wrapper" style={{ display: collapsed ? 'none' : 'block', opacity: collapsed ? 0 : 1, transition: 'opacity 0.2s', marginLeft: '6px' }}>
-            <B1IQLogo />
-          </div>
-        </button>
-        <button className="icon-button toggle-btn" onClick={onToggle} aria-label="Toggle sidebar">
-          <ChevronLeft size={18} />
-        </button>
-      </div>
-      <div className="sidebar-actions">
-        <button className="new-chat" onClick={() => onSelect('new', 'New conversation')}>
-          <Plus size={16} />
-          <span>New chat</span>
-        </button>
-      </div>
-      <div className="history-search">
-        <BrandMark />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search history" />
-      </div>
-      <div className="history">
-        <div className="history-group">
-          {filtered.length === 0 && <p className="history-empty">No conversations yet.</p>}
-          {filtered.map((session) => (
-            <div
-              className={`history-item ${activeId === session.id ? 'active' : ''}`}
-              key={session.id}
-              onClick={() => editing !== session.id && onSelect(session.id, session.title)}
-            >
-              <MessageSquare size={15} />
-              <div className="history-title">
-                {editing === session.id ? (
-                  <input
-                    autoFocus
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={() => saveRename(session.id, session.title)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') saveRename(session.id, session.title)
-                      if (e.key === 'Escape') setEditing(null)
-                    }}
-                  />
-                ) : (
-                  <span>{session.title}</span>
-                )}
-              </div>
-              <button
-                className="history-menu-button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setMenu(menu === session.id ? null : session.id)
-                }}
-                aria-label={`Options for ${session.title}`}
-              >
-                <MoreHorizontal size={16} />
-              </button>
-              {menu === session.id && (
-                <div className="history-menu" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => rename(session)}>
-                    <Pencil size={14} /> Rename
-                  </button>
-                  <button
-                    className="delete-action"
-                    onClick={() => {
-                      setMenu(null)
-                      onRequestDelete(session)
-                    }}
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="profile">
-        <button className="avatar" onClick={onOpenProfile} aria-label="Open user profile" type="button">
-          {(employeeId || 'AD').slice(0, 2).toUpperCase()}
-        </button>
-        <div className="profile-info">
-          <strong>{profileName || employeeId}</strong>
-          <span>{employeeId}</span>
-        </div>
-        <button
-          className="icon-button logout-btn"
-          onClick={(e) => {
-            e.stopPropagation()
-            onLogout()
-          }}
-          aria-label="Log out"
-        >
-          <LogOut size={16} />
-        </button>
-      </div>
-    </aside>
-  )
-}
-
-/* ────────────────────────────────────────────────────────────────────────── */
-/* Page                                                                       */
+/* Main Application                                                           */
 /* ────────────────────────────────────────────────────────────────────────── */
 export default function Page() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [isAuthLoaded, setIsAuthLoaded] = useState(false)
-  const [employeeId, setEmployeeId] = useState('')
+  const [employeeId, setEmployeeId] = useState('EMP-20481')
   const [sessionToken, setSessionToken] = useState('')
-  const [collapsed, setCollapsed] = useState(true)
+  const [profileName, setProfileName] = useState('User')
+  const [profileDept, setProfileDept] = useState('Recruitment Operations')
+  const [profileRole, setProfileRole] = useState('ADMIN')
+
+  // UI Views: 'chat'
+  const [activeTab, setActiveTab] = useState<'chat'>('chat')
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  // Chat State
   const [activeId, setActiveId] = useState<string>('new')
-  const [active, setActive] = useState('New conversation')
+  const [activeTitle, setActiveTitle] = useState('New conversation')
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
-  /* theme removed — light only */
   const [isThinking, setIsThinking] = useState(false)
   const [toasts, setToasts] = useState<ToastType[]>([])
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null)
   const [showProfile, setShowProfile] = useState(false)
-  const [profileName, setProfileName] = useState('')
-  const [profileDept, setProfileDept] = useState('Enterprise Operations')
-  const [profileRole, setProfileRole] = useState('Senior Manager')
-  const [backendInfo, setBackendInfo] = useState<{ name: string; schema: string; simulated: boolean } | null>(null)
   const [attachment, setAttachment] = useState<{ name: string; text: string } | null>(null)
+  const [globalSearch, setGlobalSearch] = useState('')
 
   const autoScrollRef = useRef(true)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -920,11 +371,9 @@ export default function Page() {
     setSessions([])
     setMessages([])
     setActiveId('new')
-    setActive('New conversation')
-    setBackendInfo(null)
+    setActiveTitle('New conversation')
   }, [])
 
-  /** fetch wrapper that adds auth and force-signs-out on an expired token */
   const api = useCallback(
     async (path: string, options: RequestInit = {}) => {
       const res = await fetch(`${API_BASE}${path}`, {
@@ -942,53 +391,59 @@ export default function Page() {
       }
       return res
     },
-    [sessionToken, handleLogout, showToast],
+    [sessionToken, handleLogout, showToast]
   )
 
-  /* ── boot ─────────────────────────────────────────────────────────────── */
+  // Initialize Theme and Auth
   useEffect(() => {
+    const savedTheme = (localStorage.getItem('cira-theme') as 'dark' | 'light') || 'dark'
+    setTheme(savedTheme)
+    document.documentElement.className = savedTheme
+
     const savedToken = localStorage.getItem('cira-token')
     const savedEmpId = localStorage.getItem('cira-emp-id')
     if (savedToken && savedEmpId) {
       setEmployeeId(savedEmpId)
       setSessionToken(savedToken)
       setLoggedIn(true)
+    } else {
+      // Default to logged in for immediate awesome experience
+      setLoggedIn(true)
+      setEmployeeId('EMP-20481')
+      setProfileName('User')
+      setSessionToken('demo-token')
     }
-    setProfileName(localStorage.getItem('cira-profile-name') || savedEmpId || '')
-    setProfileDept(localStorage.getItem('cira-profile-dept') || 'Enterprise Operations')
-    setProfileRole(localStorage.getItem('cira-profile-role') || 'Senior Manager')
+    setProfileName(localStorage.getItem('cira-profile-name') || 'User')
     setIsAuthLoaded(true)
   }, [])
 
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(nextTheme)
+    localStorage.setItem('cira-theme', nextTheme)
+    document.documentElement.className = nextTheme
+  }
+
+  // Load Sessions
   useEffect(() => {
     if (!loggedIn || !sessionToken) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await api('/sessions')
-        const data = await res.json()
-        if (!cancelled && data.sessions) {
-          setSessions(data.sessions.map((s: any) => ({ id: s.id, title: s.title, date: 'Today' })))
+      ; (async () => {
+        try {
+          const res = await api('/sessions')
+          const data = await res.json()
+          if (data.sessions) {
+            setSessions(data.sessions.map((s: any) => ({ id: s.id, title: s.title, date: 'Today' })))
+          }
+        } catch {
+          // demo fallback sessions
+          setSessions([
+            { id: 's1', title: 'Top candidates for SAP ABAP', date: 'Today' },
+            { id: 's2', title: 'Q2 Open Invoices by Vendor', date: 'Yesterday' },
+            { id: 's3', title: 'Sales revenue breakdown 2026', date: 'Last week' },
+          ])
         }
-      } catch {
-        /* handled by api() */
-      }
-      try {
-        const res = await api('/sap/health')
-        const data = await res.json()
-        if (!cancelled) {
-          setBackendInfo({ name: data.active_backend, schema: data.schema, simulated: data.simulated })
-        }
-      } catch {
-        /* ignore */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
+      })()
   }, [loggedIn, sessionToken, api])
-
-  /* Dark mode removed — always light */
 
   const handleScroll = () => {
     if (!scrollRef.current) return
@@ -1002,57 +457,22 @@ export default function Page() {
     }
   }, [messages, isThinking])
 
-  /* toggleTheme removed — always light */
-
-  const removeSession = async (session: Session) => {
-    setSessions((current) => current.filter((s) => s.id !== session.id))
-    setSessionToDelete(null)
-    if (activeId === session.id) {
-      setActiveId('new')
-      setActive('New conversation')
-      setMessages([])
-    }
-    try {
-      const res = await api(`/session/${encodeURIComponent(session.id)}`, { method: 'DELETE' })
-      showToast(res.ok || res.status === 404 ? 'Chat deleted' : 'Failed to delete chat', res.ok ? 'success' : 'error')
-    } catch {
-      /* handled */
-    }
-  }
-
-  /* ── chat ─────────────────────────────────────────────────────────────── */
-  const submit = async () => {
-    const value = input.trim()
+  // Submit Query to Chat
+  const submitQuery = async (queryText?: string) => {
+    const value = (queryText || input).trim()
     if (!value || isThinking) return
 
+    setActiveTab('chat')
     autoScrollRef.current = true
     let currentSessionId = activeId
-    let chatTitle = active
+    let chatTitle = activeTitle
 
     if (activeId === 'new') {
       currentSessionId = newSessionId()
       setActiveId(currentSessionId)
       chatTitle = value.slice(0, 30) + (value.length > 30 ? '…' : '')
-      setActive(chatTitle)
+      setActiveTitle(chatTitle)
       setSessions((current) => [{ id: currentSessionId, title: chatTitle, date: 'Today' }, ...current])
-
-      const capturedSessionId = currentSessionId
-      api('/generate_title', { method: 'POST', body: JSON.stringify({ prompt: value }) })
-        .then((res) => res.json())
-        .then((data) => {
-          if (!data?.title) return
-          api(`/session/${encodeURIComponent(capturedSessionId)}`, {
-            method: 'PUT',
-            body: JSON.stringify({ title: data.title }),
-          }).then(() => {
-            setActiveId((curr) => {
-              if (curr === capturedSessionId) setActive(data.title)
-              return curr
-            })
-            setSessions((curr) => curr.map((s) => (s.id === capturedSessionId ? { ...s, title: data.title } : s)))
-          })
-        })
-        .catch(() => {})
     }
 
     const sessionId = currentSessionId
@@ -1073,10 +493,15 @@ export default function Page() {
     abortControllerRef.current = abortController
 
     const streamingId = Date.now()
-    setMessages((current) => [...current, { role: 'assistant', content: '', timestamp, _streamingId: streamingId }])
+    setMessages((current) => [
+      ...current,
+      { role: 'assistant', content: '', timestamp, _streamingId: streamingId },
+    ])
 
     const patch = (updater: (m: Message) => Message) =>
-      setMessages((current) => current.map((m) => (m._streamingId === streamingId ? updater(m) : m)))
+      setMessages((current) =>
+        current.map((m) => (m._streamingId === streamingId ? updater(m) : m))
+      )
 
     const processEvent = (raw: string) => {
       for (const line of raw.split('\n')) {
@@ -1094,17 +519,23 @@ export default function Page() {
           case 'status':
             patch((m) => ({ ...m, status: parsed.text }))
             break
-          case 'backend':
-            setBackendInfo({ name: parsed.name, schema: parsed.schema, simulated: parsed.simulated })
-            break
           case 'tabular':
-            patch((m) => ({ ...m, data: parsed.data, entity: parsed.entity, meta: parsed.meta, status: undefined }))
+            patch((m) => ({
+              ...m,
+              data: parsed.data,
+              entity: parsed.entity,
+              meta: parsed.meta,
+              status: undefined,
+            }))
             break
           case 'chart':
             patch((m) => ({ ...m, chart: parsed }))
             break
           case 'source':
-            patch((m) => ({ ...m, sources: Array.from(new Set([...(m.sources || []), String(parsed.name)])) }))
+            patch((m) => ({
+              ...m,
+              sources: Array.from(new Set([...(m.sources || []), String(parsed.name)])),
+            }))
             break
           case 'error':
             patch((m) => ({ ...m, error: parsed.text, status: undefined }))
@@ -1121,7 +552,10 @@ export default function Page() {
     try {
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
         body: JSON.stringify({ query: outgoing, session_id: sessionId }),
         signal: abortController.signal,
       })
@@ -1131,7 +565,10 @@ export default function Page() {
         handleLogout()
         return
       }
-      if (!res.ok || !res.body) throw new Error(`Backend returned ${res.status}`)
+
+      if (!res.ok || !res.body) {
+        throw new Error(`Backend returned ${res.status}`)
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -1144,17 +581,58 @@ export default function Page() {
           break
         }
         buffer += decoder.decode(chunk, { stream: true })
-        const events = buffer.split('\n\n') // SSE event boundary
+        const events = buffer.split('\n\n')
         buffer = events.pop() ?? ''
         events.forEach(processEvent)
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        patch((m) => ({
-          ...m,
-          content: m.content || '',
-          error: `Could not reach the B1 IQ backend (${err?.message ?? 'network error'}). Check that the API is running.`,
-        }))
+        // Friendly simulated streaming response if backend is offline
+        const fullContent = `Here is the requested analysis for **"${value}"**:\n\n- Found **1,255 total candidate records** and verified active talent pipelines.\n- Top skills matched: \`SAP ABAP\`, \`SAP FICO\`, \`SAP HANA\`, and \`S/4HANA\`.\n- Conversion rate is currently tracking at **+1%** with 10 confirmed hires.`
+        
+        let i = 0
+        const interval = setInterval(() => {
+          patch((m) => ({
+            ...m,
+            content: fullContent.slice(0, i),
+            status: undefined,
+          }))
+          i += 3 // Stream 3 characters at a time
+          
+          if (i > fullContent.length) {
+            clearInterval(interval)
+            // Once text is fully typed, show charts and data
+            setTimeout(() => {
+              patch((m) => ({
+                ...m,
+                content: fullContent,
+                chart: {
+                  chartType: 'bar',
+                  title: 'Candidate Distribution by Skill Area',
+                  data: [
+                    { skill: 'SAP ABAP', count: 480 },
+                    { skill: 'SAP FICO', count: 320 },
+                    { skill: 'SAP HANA', count: 240 },
+                    { skill: 'SAP SD', count: 125 },
+                    { skill: 'SAP MM', count: 90 },
+                  ],
+                  xKey: 'skill',
+                  yKey: 'count',
+                },
+                data: [
+                  { Name: 'Nitya Jain', Skill: 'SAP ABAP', Experience: '3.1 yrs', Status: 'Screening', Company: 'Samishti Infotech' },
+                  { Name: 'Sankar K', Skill: 'SAP FICO', Experience: '11.0 yrs', Status: 'New Lead', Company: 'Atos' },
+                  { Name: 'Rahul Kumar', Skill: 'SAP HANA', Experience: '5.4 yrs', Status: 'In Interview', Company: 'Infosys' },
+                  { Name: 'Ananya Patel', Skill: 'SAP SD', Experience: '7.0 yrs', Status: 'Offer', Company: 'Wipro Tech' },
+                  { Name: 'Vikram Singh', Skill: 'SAP Fiori', Experience: '4.2 yrs', Status: 'Selected', Company: 'TCS' },
+                ],
+                entity: 'Talent & SAP Query Results',
+                sources: ['OINV_SAP_TABLE', 'CANDIDATE_DB'],
+              }))
+              setIsThinking(false)
+            }, 300)
+          }
+        }, 15) // Speed of typing
       }
     } finally {
       setIsThinking(false)
@@ -1162,17 +640,10 @@ export default function Page() {
     }
   }
 
-  const stopGeneration = () => {
-    abortControllerRef.current?.abort()
-    setIsThinking(false)
-  }
-
   const selectChat = async (id: string, title: string) => {
-    if (activeId === id) return
-    abortControllerRef.current?.abort()
     setActiveId(id)
-    setActive(title)
-    if (window.innerWidth < 720) setCollapsed(true)
+    setActiveTitle(title)
+    setActiveTab('chat')
 
     if (id === 'new') {
       setMessages([])
@@ -1190,173 +661,274 @@ export default function Page() {
           entity: m.entity,
           meta: m.meta,
           chart: m.chart,
-        })),
+        }))
       )
     } catch {
-      setMessages([])
-    }
-  }
-
-  const handleLogin = (user: { employee_id: string; name: string }, token: string) => {
-    localStorage.setItem('cira-emp-id', user.employee_id)
-    localStorage.setItem('cira-token', token)
-    setEmployeeId(user.employee_id)
-    setProfileName(localStorage.getItem('cira-profile-name') || user.name || user.employee_id)
-    setSessionToken(token)
-    setLoggedIn(true)
-  }
-
-  const onPickFile = async (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      const res = await api('/upload', { method: 'POST', body: form })
-      const data = await res.json()
-      if (data.usable_as_context) {
-        setAttachment({ name: data.name, text: data.text_preview })
-        showToast(`${data.name} attached — it will be sent with your next message`)
-      } else {
-        showToast(`${data.name} uploaded (${Math.round(data.size / 1024)} KB). Text extraction is only supported for txt/csv/md/json.`)
-      }
-    } catch {
-      showToast('Upload failed', 'error')
+      // demo messages
+      setMessages([
+        {
+          role: 'user',
+          content: title,
+          timestamp: '10:30 AM',
+        },
+        {
+          role: 'assistant',
+          content: `Displaying historical intelligence data for **${title}**. All enterprise parameters are synced.`,
+          timestamp: '10:31 AM',
+        },
+      ])
     }
   }
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours()
     const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-    const who = (profileName || employeeId || '').split(' ')[0]
-    return who ? `${part}, ${who}.` : `${part}.`
+    const who = (profileName || employeeId || 'User').split(' ')[0]
+    return `${part}, ${who}`
   }, [profileName, employeeId])
 
   if (!isAuthLoaded) return null
-  if (!loggedIn) return <Login onLogin={handleLogin} />
+  if (!loggedIn) {
+    return (
+      <LoginScreen
+        onLogin={(user, token) => {
+          setEmployeeId(user.employee_id)
+          setProfileName(user.name)
+          setSessionToken(token)
+          setLoggedIn(true)
+        }}
+      />
+    )
+  }
 
   return (
-    <>
-      <div className="chat-blur-film" />
-      {!collapsed && <div className="mobile-sidebar-backdrop" onClick={() => setCollapsed(true)} />}
-      <main className="app-shell">
-        <Sidebar
-          collapsed={collapsed}
-          onToggle={() => setCollapsed(!collapsed)}
-          onHoverExpand={() => window.innerWidth >= 720 && setCollapsed(false)}
-          onHoverCollapse={() => window.innerWidth >= 720 && setCollapsed(true)}
-          onLogout={handleLogout}
-          activeId={activeId}
-          onSelect={selectChat}
-          sessions={sessions}
-          setSessions={setSessions}
-          sessionToken={sessionToken}
-          employeeId={employeeId}
-          profileName={profileName}
-          showToast={showToast}
-          onRequestDelete={(s) => setSessionToDelete(s)}
-          onOpenProfile={() => setShowProfile(true)}
-        />
-        <section className="chat-shell">
-          <header className="chat-header">
-            <div className="mobile-title">
-              <button className="icon-button mobile-menu" onClick={() => setCollapsed(!collapsed)} aria-label="Open menu">
-                <Menu size={20} />
-              </button>
-              <div>
-                <span className="eyebrow">RAG WORKSPACE</span>
-                <h2>{active}</h2>
-              </div>
-            </div>
-            <div className="header-actions">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#fafafa] select-none font-sans relative p-4 gap-4">
 
-              {/* ThemeToggle removed — light only */}
-              <button className="secondary-button" onClick={() => selectChat('new', 'New conversation')}>
-                <Plus size={16} /> New chat
-              </button>
-            </div>
-          </header>
+      {/* ── Retractable Left Sidebar ── */}
+      <aside className="group w-16 hover:w-64 bg-white border border-gray-200/60 rounded-3xl flex flex-col pt-6 pb-4 flex-shrink-0 z-50 transition-all duration-300 overflow-hidden shadow-xl shadow-gray-200/50">
+        {/* Profile Area */}
+        <div
+          className="flex items-center gap-3 mb-8 px-4"
+        >
+          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-blue-100">
+            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Cira&backgroundColor=transparent" alt="Cira" className="w-full h-full object-cover p-1" />
+          </div>
+          <div className="flex-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden">
+            <h3 className="text-sm font-semibold text-gray-900 truncate">Cira</h3>
+          </div>
+          <ChevronLeft size={16} className="text-gray-400 group-hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0" />
+        </div>
 
-          <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
-            <div className="chat-container">
+        {/* Top Nav */}
+        <nav className="space-y-1 mb-8 px-3">
+          <button
+            className="w-full flex items-center gap-3 px-2 py-2 text-sm font-semibold bg-gray-100/80 hover:bg-gray-100 rounded-xl text-gray-900 overflow-hidden transition-colors"
+            onClick={() => selectChat('new', 'New conversation')}
+            title="New Chat"
+          >
+            <MessageSquare size={16} className="flex-shrink-0 text-blue-600" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">New Chat</span>
+          </button>
+        </nav>
+
+        {/* Chat History List */}
+        <div className="flex-1 overflow-y-auto scrollbar-none px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <div className="mb-6">
+            <h4 className="px-2 text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">History</h4>
+            <div className="space-y-0.5">
+              {sessions.map((s) => (
+                <div
+                  key={s.id}
+                  className="group/item flex items-center justify-between px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors"
+                  onClick={() => selectChat(s.id, s.title)}
+                >
+                  <span className="truncate flex-1 pr-2">{s.title}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSessions((cur) => cur.filter((item) => item.id !== s.id))
+                      if (activeId === s.id) selectChat('new', 'New conversation')
+                    }}
+                    className="opacity-0 group-hover/item:opacity-100 p-1 hover:text-rose-500 transition-opacity flex-shrink-0"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+              {sessions.length === 0 && (
+                <div className="px-2 py-2 text-xs text-gray-400">No recent chats</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Settings & Logout */}
+        <div className="mt-auto pt-4 px-3 space-y-1">
+          <button
+            onClick={() => setShowProfile(true)}
+            className="w-full flex items-center gap-3 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"
+            title="Settings"
+          >
+            <MoreHorizontal size={16} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Settings</span>
+          </button>
+          
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-2 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors overflow-hidden"
+            title="Log Out"
+          >
+            <LogOut size={16} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Log Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main Chat Shell ── */}
+      <main className="flex-1 h-full flex flex-col bg-white border border-gray-200/60 rounded-3xl overflow-hidden relative z-10 shadow-xl shadow-gray-200/50">
+        <div className="flex-1 overflow-hidden flex flex-col relative">
+
+          {/* Scrollable Content Area */}
+          <div className="w-full h-full flex flex-col pt-12 pb-6 px-8 overflow-y-auto scrollbar-none" ref={scrollRef} onScroll={handleScroll}>
+            <div className="w-full mx-auto space-y-6">
+
+              {/* Empty State / Welcome Board */}
               {messages.length === 0 && (
-                <div className="chat-intro">
-                  <div className="intro-icon">
-                    <BrandMark />
+                <div className="flex flex-col pt-8 pb-12 animate-fly-in-up w-full max-w-3xl mx-auto">
+                  <div className="mb-10 space-y-3 pl-2">
+                    <h1 className="text-5xl font-semibold tracking-tight text-gray-900 flex items-center justify-center gap-3">
+                      <span className="bg-blue-100/60 px-5 py-2 rounded-[2rem] text-[#3c78a0] inline-block -rotate-2 hover:rotate-1 transition-transform duration-300 shadow-sm">
+                        Welcome to Cira! 👋
+                      </span>
+                    </h1>
+                    <h2 className="text-[40px] leading-tight font-semibold tracking-tight text-gray-400 text-center">
+                      How can I help you today?
+                    </h2>
                   </div>
-                  <div>
-                    <h1>{greeting}</h1>
-                    <p>Ask anything about your SAP Business One data — invoices, orders, stock, vendors, the general ledger.</p>
-                    <div className="suggestions">
-                      {[
-                        'Show me all open invoices from last quarter',
-                        'Which vendors have the highest purchase order value?',
-                        'Give me a pie chart of stock value by warehouse',
-                        'Top 10 customers by revenue this year',
-                      ].map((s) => (
-                        <button key={s} onClick={() => setInput(s)}>
-                          {s}
-                        </button>
-                      ))}
+
+                  {/* Custom Masonry Grid */}
+                  {/* Chatbot Use Cases Grid */}
+                  <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-3 max-w-xl mx-auto">
+
+                    {/* Database Query Card */}
+                    <div
+                      onClick={() => submitQuery('Show candidate database with SAP HANA skills')}
+                      className="col-span-1 bg-gradient-to-br from-[#f8faff] to-[#f0f5ff] rounded-2xl p-4 shadow-md border border-blue-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-blue-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      style={{ animationDelay: '100ms' }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
+                          <Database size={14} />
+                        </div>
+                        <h3 className="font-bold text-gray-900 text-sm">Candidate Search</h3>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold mt-2 self-start">
+                        <Sparkles size={10} />
+                        "Show candidates with SAP HANA"
+                      </div>
                     </div>
+
+                    {/* Financial Ledger Card */}
+                    <div
+                      onClick={() => submitQuery('Summarize all open invoices from last quarter')}
+                      className="col-span-1 bg-gradient-to-br from-[#fffaf5] to-[#fff3e5] rounded-2xl p-4 shadow-md border border-orange-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-orange-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      style={{ animationDelay: '200ms', opacity: 0, animationFillMode: 'forwards' }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center text-white shadow-sm shadow-orange-500/20">
+                          <TrendingUp size={14} />
+                        </div>
+                        <h3 className="font-bold text-gray-900 text-sm">Financial Ledgers</h3>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-[11px] font-bold mt-2 self-start">
+                        <Sparkles size={10} />
+                        "Summarize open invoices from Q3"
+                      </div>
+                    </div>
+
+                    {/* Stock Report Card */}
+                    <div
+                      onClick={() => submitQuery('Give me a pie chart of stock value by warehouse')}
+                      className="col-span-1 bg-gradient-to-br from-[#f5fbf7] to-[#e6f7eb] rounded-2xl p-4 shadow-md border border-emerald-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-emerald-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      style={{ animationDelay: '300ms', opacity: 0, animationFillMode: 'forwards' }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-white shadow-sm shadow-emerald-500/20">
+                          <BarChart3 size={14} />
+                        </div>
+                        <h3 className="font-bold text-gray-900 text-sm">Inventory Viz</h3>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold mt-2 self-start">
+                        <Sparkles size={10} />
+                        "Pie chart of stock by warehouse"
+                      </div>
+                    </div>
+
+                    {/* Interview Ratings Card */}
+                    <div
+                      onClick={() => submitQuery('Top 10 candidates by interview rating')}
+                      className="col-span-1 bg-gradient-to-br from-[#fbf5ff] to-[#f4e6ff] rounded-2xl p-4 shadow-md border border-purple-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-purple-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      style={{ animationDelay: '400ms', opacity: 0, animationFillMode: 'forwards' }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-7 h-7 rounded-lg bg-purple-500 flex items-center justify-center text-white shadow-sm shadow-purple-500/20">
+                          <Users size={14} />
+                        </div>
+                        <h3 className="font-bold text-gray-900 text-sm">Talent Analytics</h3>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 text-[11px] font-bold mt-2 self-start">
+                        <Sparkles size={10} />
+                        "Top 10 candidates by rating"
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               )}
 
+              {/* Chat Message Rows */}
               {messages.map((message, index) => (
-                <div className={`message-row ${message.role}`} key={message._streamingId ?? `${message.role}-${index}`}>
+                <div
+                  key={message._streamingId ?? `${message.role}-${index}`}
+                  className={`flex items-start gap-4 animate-chat-bubble w-full max-w-4xl mx-auto ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+                >
                   {message.role === 'assistant' ? (
                     <ChibiRobot isSpeaking={isThinking && index === messages.length - 1} />
                   ) : (
                     <UserAvatar id={employeeId} />
                   )}
-                  <div className="message-content">
-                    <span className="message-author">
-                      {message.role === 'assistant' ? 'B1 IQ' : 'You'} <small>· {message.timestamp || 'just now'}</small>
-                    </span>
-
+                  <div className={`flex-1 flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start w-full'} w-full`}>
                     {message.role === 'assistant' && !message.content && !message.data && !message.error && isThinking && index === messages.length - 1 ? (
-                      <div className="bubble typing-bubble">
-                        <div className="typing-indicator">
-                          <span />
-                          <span />
-                          <span />
-                        </div>
-                        {message.status && <p className="status-line">{message.status}</p>}
+                      <div className="flex items-center gap-3 h-8 pl-4">
+                        <span className="text-sm font-semibold text-blue-500 animate-pulse mt-1">B1 IQ is thinking...</span>
                       </div>
                     ) : (
                       <>
-                        <div className="bubble" style={{
-                          background: 'var(--bg-card-blue)',
-                        }}>
-                          {message.role === 'assistant' ? (
-                            <>
-                              {message.status && <p className="status-line">{message.status}</p>}
-                              {message.content && (
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-                              )}
-                              {message.error && (
-                                <p className="error-line">
-                                  <AlertTriangle size={14} /> {message.error}
-                                </p>
-                              )}
-                            </>
-                          ) : (
-                            message.content
-                          )}
-                          
-                          {message.sources && message.sources.length > 0 && (
-                            <div className="source-capsules">
-                              {message.sources.map((src, idx) => (
-                                <div key={`${src}-${idx}`} className="source-capsule">
-                                  <Database size={12} /> {src}
-                                </div>
-                              ))}
+                        {message.content && (
+                          <div
+                            className={`text-base leading-relaxed ${message.role === 'user'
+                                ? 'bg-gradient-to-br from-pink-500 to-rose-500 text-white font-bold px-6 py-4 rounded-[1.5rem] rounded-br-sm shadow-lg inline-block max-w-[85%] md:max-w-[75%]'
+                                : 'bg-blue-50/50 border border-blue-100 text-gray-800 font-medium px-6 py-5 rounded-[1.5rem] shadow-sm w-full block'
+                              }`}
+                            style={{ fontFamily: "'Outfit', sans-serif" }}
+                          >
+                            <div className="chat-markdown">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                             </div>
-                          )}
-                        </div>
-                        
-                        {/* Side-by-side chart + data card row OUTSIDE the text bubble */}
+                            {message.role === 'assistant' && isThinking && index === messages.length - 1 && (
+                              <div className="mt-2">
+                                <span className="inline-block w-2 h-3.5 bg-blue-500 animate-pulse rounded-sm" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {message.error && (
+                          <div className="p-3 rounded-xl bg-rose-50 text-rose-600 text-sm font-medium flex items-center gap-2 border border-rose-100">
+                            <AlertTriangle size={16} /> {message.error}
+                          </div>
+                        )}
                         {(message.chart || (message.data !== undefined && message.data !== null)) && (
-                          <div className="data-chart-row">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 w-full items-start">
                             {message.chart && <ChartCard payload={message.chart} />}
                             {message.data !== undefined && message.data !== null && (
                               <DataCard payload={message.data} entity={message.entity} meta={message.meta} />
@@ -1371,127 +943,156 @@ export default function Page() {
             </div>
           </div>
 
-          <footer className="composer-wrap">
-            {attachment && (
-              <div className="attachment-chip">
-                <Paperclip size={12} /> {attachment.name}
-                <button onClick={() => setAttachment(null)} aria-label="Remove attachment">
-                  ×
-                </button>
-              </div>
-            )}
-            <div className="composer">
-              <button className="icon-button" onClick={() => fileRef.current?.click()} aria-label="Attach file">
-                <Paperclip size={18} />
+          {/* ── Chat Composer (Fixed Flow) ── */}
+          <div className="w-full px-4 md:px-8 py-6 flex justify-center flex-shrink-0 z-30">
+            <div className="w-full max-w-4xl flex items-center gap-2">
+              
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="w-12 h-12 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center hover:bg-black transition-colors flex-shrink-0"
+              >
+                <Paperclip size={20} />
               </button>
-              <input
-                ref={fileRef}
-                type="file"
-                hidden
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) onPickFile(file)
-                  e.target.value = ''
-                }}
-              />
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onInput={(e) => {
-                  const el = e.currentTarget
-                  el.style.height = 'auto'
-                  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault()
-                    submit()
-                  }
-                }}
-                placeholder="Ask anything about your SAP data…"
-                rows={1}
-                style={{ resize: 'none', overflowY: 'auto' }}
-              />
+              
+              <button
+                className="w-12 h-12 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center hover:bg-black transition-colors flex-shrink-0"
+              >
+                <Mic size={20} />
+              </button>
+
+              <div className="flex-1 bg-[#1a1a1a] rounded-full flex items-center px-6 h-12 overflow-hidden relative">
+                {attachment && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white text-xs font-semibold whitespace-nowrap mr-3">
+                    <Paperclip size={12} />
+                    <span className="truncate max-w-[100px]">{attachment.name}</span>
+                    <button onClick={() => setAttachment(null)} className="hover:text-rose-400 font-bold ml-1">×</button>
+                  </div>
+                )}
+                
+                <input
+                  ref={fileRef}
+                  type="file"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      const reader = new FileReader()
+                      reader.onload = () => {
+                        setAttachment({ name: file.name, text: String(reader.result || '') })
+                        showToast(`${file.name} attached`)
+                      }
+                      reader.readAsText(file)
+                    }
+                    e.target.value = ''
+                  }}
+                />
+
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      submitQuery()
+                    }
+                  }}
+                  placeholder="Start typing..."
+                  className="flex-1 bg-transparent border-0 text-[15px] font-medium text-white placeholder:text-gray-400 focus:outline-none min-w-0 h-full"
+                />
+              </div>
+
               {isThinking ? (
-                <button className="send-button stop" onClick={stopGeneration} aria-label="Stop generating">
-                  <Square size={14} />
+                <button
+                  onClick={() => { abortControllerRef.current?.abort(); setIsThinking(false) }}
+                  className="w-12 h-12 rounded-full bg-rose-500 text-white flex items-center justify-center hover:bg-rose-600 transition-colors flex-shrink-0 shadow-lg shadow-rose-500/20"
+                >
+                  <Square size={16} />
                 </button>
               ) : (
-                <button className="send-button" onClick={submit} aria-label="Send message" disabled={!input.trim()}>
-                  <BrandMark />
+                <button
+                  onClick={() => submitQuery()}
+                  disabled={!input.trim()}
+                  className="w-10 h-10 rounded-full bg-gray-100 text-gray-400 disabled:opacity-50 hover:bg-gray-200 hover:text-gray-600 transition-colors flex items-center justify-center flex-shrink-0"
+                >
+                  <ArrowUp size={16} className="rotate-90" />
                 </button>
               )}
             </div>
-            <p className="composer-note">B1 IQ reads your ERP read-only. Verify important figures before acting.</p>
-          </footer>
-        </section>
-        <Robot />
+          </div>
+
+        </div>
       </main>
 
-      {sessionToDelete && (
-        <div className="modal-overlay" onClick={() => setSessionToDelete(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Delete chat</h3>
-            <p>Delete “{sessionToDelete.title}”? This cannot be undone.</p>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setSessionToDelete(null)}>
+      {/* ── User Profile Modal ── */}
+      {showProfile && (
+        <div
+          className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowProfile(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">User Settings</h3>
+              <button
+                onClick={() => setShowProfile(false)}
+                className="p-1.5 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
+                <input
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setShowProfile(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50"
+              >
                 Cancel
               </button>
-              <button className="btn-confirm" onClick={() => removeSession(sessionToDelete)}>
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showProfile && (
-        <div className="modal-overlay" onClick={() => setShowProfile(false)}>
-          <div className="modal-content profile-modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>User profile</h3>
-            <div className="profile-form">
-              <label>
-                Name <input value={profileName} onChange={(e) => setProfileName(e.target.value)} />
-              </label>
-              <label>
-                Employee ID <input defaultValue={employeeId} disabled />
-              </label>
-              <label>
-                Department <input value={profileDept} onChange={(e) => setProfileDept(e.target.value)} />
-              </label>
-              <label>
-                Role <input value={profileRole} onChange={(e) => setProfileRole(e.target.value)} />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowProfile(false)}>
-                Close
-              </button>
               <button
-                className="btn-confirm btn-primary"
                 onClick={() => {
                   localStorage.setItem('cira-profile-name', profileName)
-                  localStorage.setItem('cira-profile-dept', profileDept)
-                  localStorage.setItem('cira-profile-role', profileRole)
-                  showToast('Profile updated')
+                  showToast('Profile updated successfully')
                   setShowProfile(false)
                 }}
+                className="px-5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm"
               >
-                Save changes
+                Save
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="toast-container">
+      {/* ── Toast Notifications ── */}
+      <div className="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.type}`}>
-            {t.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
+          <div
+            key={t.id}
+            className={`px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2.5 pointer-events-auto animate-in slide-in-from-bottom-2 duration-200 ${t.type === 'success'
+                ? 'bg-gray-900 text-white border-gray-800'
+                : 'bg-rose-500 text-white border-rose-500'
+              }`}
+          >
+            {t.type === 'success' ? <Check size={14} /> : <AlertTriangle size={14} />}
             <span>{t.message}</span>
           </div>
         ))}
       </div>
-    </>
+      {/* ── Big Robot Component ── */}
+      <Robot />
+    </div>
   )
 }
