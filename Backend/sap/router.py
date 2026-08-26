@@ -563,9 +563,25 @@ async def health() -> dict:
     return await asyncio.to_thread(_health_sync)
 
 
+def _create_entity_sync(table_or_entity: str, data: dict) -> dict:
+    backend = get_active_backend()
+    if not hasattr(backend, "create_entity"):
+        from .types_ import SapDataError
+        raise SapDataError(
+            f"The active backend '{backend.name}' does not support write operations. "
+            "The SAP B1 Service Layer must be reachable to create records."
+        )
+    return backend.create_entity(table_or_entity, data)
+
+
+async def create_entity(table_or_entity: str, data: dict) -> dict:
+    return await asyncio.to_thread(_create_entity_sync, table_or_entity, data)
+
+
 __all__ = [
     "SapDataError",
     "SapUnavailableError",
+    "create_entity",
     "describe_table",
     "get_active_backend",
     "health",

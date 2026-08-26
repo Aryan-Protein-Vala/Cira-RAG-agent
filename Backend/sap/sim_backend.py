@@ -435,6 +435,22 @@ class SimulatorBackend(DataBackend):
         cur.close()
         return columns, rows
 
+    def create_entity(self, table_or_entity: str, data: dict) -> dict:
+        """Mock create_entity for the offline sandbox."""
+        # For a sandbox, we just pretend it succeeded and assign a random ID.
+        import random
+        # Optional: we could actually try to INSERT INTO the sqlite table if we want,
+        # but a mock response is usually enough for UI testing.
+        new_id = random.randint(300000, 999999)
+        return {
+            **data,
+            "DocEntry": new_id,
+            "DocNum": new_id,
+            "CardCode": data.get("CardCode", f"C{new_id}"),
+            "_simulated": True,
+            "_note": "This is a mock response from the offline sandbox.",
+        }
+
 
 def _length_of(hana_type: str) -> int | None:
     if "(" in hana_type:

@@ -15,6 +15,7 @@ router       : picks a backend (auto/hana/service/simulator) and exposes the
 """
 
 from .router import (  # noqa: F401
+    create_entity,
     describe_table,
     get_active_backend,
     health,

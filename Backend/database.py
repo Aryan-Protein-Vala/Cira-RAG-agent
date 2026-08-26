@@ -60,10 +60,11 @@ class ChatMessage(Base):
     employee_id = Column(String, index=True, nullable=False)
     role = Column(String)                        # 'user' | 'assistant'
     content = Column(Text)
-    msg_type = Column(String, nullable=True)     # 'text' | 'tabular' | 'chart'
+    msg_type = Column(String, nullable=True)     # 'text' | 'tabular' | 'chart' | 'form'
     data_payload = Column(Text, nullable=True)   # JSON: table rows
     entity = Column(String, nullable=True)       # e.g. OINV
     chart_payload = Column(Text, nullable=True)  # JSON: chart config
+    form_payload = Column(Text, nullable=True)   # JSON: form schema
     meta_payload = Column(Text, nullable=True)   # JSON: source/backend/sql/etc.
     created_at = Column(DateTime, default=_utcnow)
 
@@ -88,6 +89,7 @@ async def _add_missing_columns() -> None:
         "chat_messages": {
             "entity": "VARCHAR",
             "chart_payload": "TEXT",
+            "form_payload": "TEXT",
             "meta_payload": "TEXT",
             "created_at": "DATETIME",
             "employee_id": "VARCHAR",

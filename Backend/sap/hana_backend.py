@@ -140,6 +140,14 @@ class HanaBackend(DataBackend):
             except Exception:
                 pass
 
+    def create_entity(self, table_or_entity: str, data: dict) -> dict:
+        """Create a new entity in SAP by delegating to the OData Service Layer."""
+        # Writes must go through the Service Layer for business logic validation,
+        # even when our primary read path is direct HANA SQL.
+        from .service_layer import ServiceLayerBackend
+        sl = ServiceLayerBackend()
+        return sl.create_entity(table_or_entity, data)
+
     # ── raw execution ────────────────────────────────────────────────────────
     def execute(self, sql: str, params: list[Any] | None = None) -> tuple[list[str], list[tuple]]:
         conn = self._acquire()

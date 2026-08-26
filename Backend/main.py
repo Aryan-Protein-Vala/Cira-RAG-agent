@@ -188,6 +188,26 @@ async def transcribe_audio(
         return response.json()
 
 
+class WriteRequest(BaseModel):
+    entity: str = Field(..., description="SAP B1 Service Layer entity (e.g. 'BusinessPartners')")
+    table: str = Field("", description="Underlying SAP table name (e.g. 'OCRD')")
+    data: dict = Field(..., description="Field values to write")
+
+
+@app.post("/sap/write")
+async def sap_write(
+    body: WriteRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    """Create a new entity record in SAP Business One via the Service Layer."""
+    validate_and_extract(credentials)
+    try:
+        result = await sap.create_entity(body.entity, body.data)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/sap/health")
 async def sap_health():
     return await sap.health()
@@ -225,6 +245,7 @@ async def generate_chat_response(query: str, session_id: str, sap_token: str, em
     tabular_meta = None
     entity_name = None
     chart_payload = None
+    form_payload = None
 
     async with create_short_lived_session() as db:
         result = await db.execute(
@@ -295,6 +316,8 @@ async def generate_chat_response(query: str, session_id: str, sap_token: str, em
                 entity_name = data.get("entity")
             elif kind == "chart":
                 chart_payload = data
+            elif kind == "form":
+                form_payload = data
             elif kind == "error":
                 full_text.append(str(data.get("text", "")))
     finally:
@@ -310,10 +333,11 @@ async def generate_chat_response(query: str, session_id: str, sap_token: str, em
                         employee_id=employee_id,
                         role="assistant",
                         content=text,
-                        msg_type="chart" if chart_payload else ("tabular" if rows else "text"),
+                        msg_type="form" if form_payload else ("chart" if chart_payload else ("tabular" if rows else "text")),
                         data_payload=json.dumps(rows, default=str) if rows is not None else None,
                         entity=entity_name,
                         chart_payload=json.dumps(chart_payload, default=str) if chart_payload else None,
+                        form_payload=json.dumps(form_payload, default=str) if form_payload else None,
                         meta_payload=json.dumps(tabular_meta, default=str) if tabular_meta else None,
                     )
                 )
@@ -426,6 +450,7 @@ async def get_history(
                 "data": _loads(m.data_payload),
                 "entity": m.entity,
                 "chart": _loads(m.chart_payload),
+                "form": _loads(m.form_payload),
                 "meta": _loads(m.meta_payload),
                 "timestamp": m.created_at.isoformat() if m.created_at else None,
             }

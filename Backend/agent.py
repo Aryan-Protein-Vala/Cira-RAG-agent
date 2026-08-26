@@ -82,11 +82,20 @@ class Dataset:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass
+class FormPayload:
+    entity: str          # e.g. "BusinessPartners"
+    table: str           # e.g. "OCRD"
+    title: str           # human label, e.g. "Create Business Partner"
+    fields: list[dict]   # [{name, label, type, required, options, default}, ...]
+
+
 class ResultBus:
     """Collects datasets produced by tool calls during a single question."""
 
     def __init__(self) -> None:
         self._pending: list[Dataset] = []
+        self._pending_forms: list[FormPayload] = []
         self.all: list[Dataset] = []
         self.sources: list[str] = []
 
@@ -101,6 +110,13 @@ class ResultBus:
     def note_source(self, name: str) -> None:
         if name not in self.sources:
             self.sources.append(name)
+
+    def push_form(self, form: FormPayload) -> None:
+        self._pending_forms.append(form)
+
+    def drain_forms(self) -> list[FormPayload]:
+        out, self._pending_forms = self._pending_forms, []
+        return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -306,6 +322,53 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
             return {"ok": True, "matches": [], "note": "No policy document matched that question."}
         return {"ok": True, "matches": hits}
 
+    async def sap_data_entry_form(
+        entity: str,
+        table: str,
+        title: str,
+        fields: list[dict],
+    ) -> dict:
+        """Show the user a data-entry form to create a new record in SAP Business One.
+
+        Call this tool ONLY when the user explicitly asks to CREATE, ADD, INSERT or REGISTER
+        a new record (e.g. "create a customer", "add a new invoice", "register a vendor").
+        Do NOT call it for queries or reporting.
+
+        entity:  The SAP B1 Service Layer entity name (e.g. "BusinessPartners",
+                 "Invoices", "Orders", "Items").
+        table:   The underlying SAP B1 table name (e.g. "OCRD", "OINV", "ORDR", "OITM").
+        title:   A short human-readable label for the form (e.g. "Create Business Partner").
+        fields:  A list of field definitions. Each field MUST have:
+                   - name:     SAP field name exactly as the Service Layer expects (e.g. "CardCode").
+                   - label:    Human-readable label (e.g. "Customer Code").
+                   - type:     One of: "text", "number", "date", "select", "email", "phone".
+                   - required: true for mandatory fields, false for optional.
+                 Each field MAY also have:
+                   - options:  List of {"value": "...", "label": "..."} for "select" type.
+                   - default:  A pre-filled default value.
+                   - hint:     Short helper text shown under the field.
+
+        RULES:
+        - Include ONLY mandatory fields (required: true). Skip optional fields.
+        - For fields with a known set of values (CardType, DocCurrency, etc.), use type="select"
+          and populate options with the actual valid SAP values.
+        - For CardType: options = [{value: "C", label: "Customer"}, {value: "S", label: "Vendor"}, {value: "L", label: "Lead"}].
+        - For currencies, use common ones: USD, EUR, INR, AED, GBP.
+        - Always include DocDate (today) as a date field with a sensible default.
+        - The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
+        """
+        bus.push_form(FormPayload(
+            entity=entity,
+            table=table,
+            title=title,
+            fields=fields,
+        ))
+        return {
+            "ok": True,
+            "rendered_in_ui": True,
+            "note": "A data entry form has been rendered for the user. Tell them to fill it out and click Submit.",
+        }
+
     return [
         StructuredTool.from_function(coroutine=sap_query, name="sap_query",
                                      description=sap_query.__doc__),
@@ -317,6 +380,8 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
                                      description=sap_sql.__doc__),
         StructuredTool.from_function(coroutine=query_company_docs, name="query_company_docs",
                                      description=query_company_docs.__doc__),
+        StructuredTool.from_function(coroutine=sap_data_entry_form, name="sap_data_entry_form",
+                                     description=sap_data_entry_form.__doc__),
     ]
 
 
@@ -415,6 +480,10 @@ windows, GROUP BY and aggregates. Use it for almost everything.
 - `sap_search_schema` / `sap_describe_table` — use these when you are not certain which \
 table or column holds a field. Never guess a column name twice: look it up.
 - `query_company_docs` — internal policies (travel, expenses, procurement, credit, security).
+- `sap_data_entry_form` — call this ONLY when the user wants to CREATE or ADD a new record \
+(e.g. "create a customer", "add an invoice", "register a vendor"). It renders a smart \
+data-entry form in the UI. Include ONLY mandatory fields. Use type="select" with real SAP \
+code options for enum fields like CardType, DocCurrency, etc.
 
 SAP B1 FACTS YOU MUST USE
 - Header/line pairs: ORDR/RDR1 (sales orders), OINV/INV1 (A/R invoices), OPOR/POR1 \
@@ -536,6 +605,7 @@ async def stream_chat_query(
                     "sap_search_schema": "Searching the SAP schema…",
                     "sap_describe_table": "Reading table definition…",
                     "query_company_docs": "Searching company policies…",
+                    "sap_data_entry_form": "Building data entry form…",
                 }.get(name, f"Running {name}…")
                 yield sse({"type": "status", "text": label, "tool": name})
 
@@ -544,6 +614,15 @@ async def stream_chat_query(
                     text_filter.suppress = True
                     for payload in dataset_events(dataset, query):
                         yield sse(payload)
+                for form in bus.drain_forms():
+                    text_filter.suppress = False  # AI should still explain the form
+                    yield sse({
+                        "type": "form",
+                        "entity": form.entity,
+                        "table": form.table,
+                        "title": form.title,
+                        "fields": form.fields,
+                    })
                 for source in bus.sources:
                     yield sse({"type": "source", "name": source})
 

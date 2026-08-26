@@ -42,6 +42,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { RobotMascot } from './components/RobotMascot'
 import { DataCard, MessageMeta } from './components/DataCard'
+import { DynamicFormCard, FormPayload } from './components/DynamicFormCard'
 import { ChartCard, ChartPayload } from './ChartCard'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
@@ -53,6 +54,7 @@ type Message = {
   entity?: string
   meta?: MessageMeta
   chart?: ChartPayload
+  form?: FormPayload
   timestamp?: string
   sources?: string[]
   status?: string
@@ -709,6 +711,17 @@ export default function Page() {
               status: undefined,
             }))
             break
+          case 'form':
+            patch((m) => ({
+              ...m,
+              form: {
+                entity: parsed.entity,
+                table: parsed.table,
+                title: parsed.title,
+                fields: parsed.fields,
+              }
+            }))
+            break
           case 'chart':
             patch((m) => ({ ...m, chart: parsed }))
             break
@@ -842,6 +855,7 @@ export default function Page() {
           entity: m.entity,
           meta: m.meta,
           chart: m.chart,
+          form: m.form,
         }))
       )
     } catch {
@@ -1139,8 +1153,19 @@ export default function Page() {
                   )}
                   <div className={`flex-1 flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start w-full'} w-full`}>
                     {message.role === 'assistant' && !message.content && !message.data && !message.error && isThinking && index === messages.length - 1 ? (
-                      <div className="flex items-center gap-3 h-8 pl-4">
-                        <span className="text-sm font-semibold text-blue-500 animate-pulse mt-1">B1 IQ is thinking...</span>
+                      <div className="flex items-center h-8 pl-4 trail-text font-semibold text-sm mt-1 text-indigo-500">
+                        {Array.from("B1 IQ is thinking...").map((char, i) => (
+                          <span
+                            key={i}
+                            className="inline-block"
+                            style={{
+                              animation: 'trail 1.5s infinite ease-in-out',
+                              animationDelay: `${i * 0.05}s`
+                            }}
+                          >
+                            {char === ' ' ? '\u00A0' : char}
+                          </span>
+                        ))}
                       </div>
                     ) : (
                       <>
@@ -1165,6 +1190,18 @@ export default function Page() {
                         {message.error && (
                           <div className="p-3 rounded-xl bg-rose-50 text-rose-600 text-sm font-medium flex items-center gap-2 border border-rose-100">
                             <AlertTriangle size={16} /> {message.error}
+                          </div>
+                        )}
+                        {message.form && (
+                          <div className="pt-4 w-full animate-fade-in">
+                            <DynamicFormCard 
+                              payload={message.form}
+                              token={sessionToken}
+                              messageKey={`${activeId}-${index}`}
+                              onSuccess={() => {
+                                // Add success behavior here if necessary
+                              }}
+                            />
                           </div>
                         )}
                         {(message.chart || (message.data !== undefined && message.data !== null)) && (

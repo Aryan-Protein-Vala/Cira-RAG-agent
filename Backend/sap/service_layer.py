@@ -177,6 +177,23 @@ class ServiceLayerBackend(DataBackend):
             return resp.json()
         raise SapUnavailableError("Service Layer authentication kept failing.")
 
+    def _post(self, path: str, data: dict) -> dict:
+        cookies = self._login()
+        url = path if path.startswith("http") else f"{self.base}/{path.lstrip('/')}"
+        for attempt in range(2):
+            with self._client(cookies) as client:
+                resp = client.post(url, json=data)
+            if resp.status_code == 401 and attempt == 0:
+                cookies = self._login(force=True)
+                continue
+            if resp.status_code >= 400:
+                raise SapDataError(
+                    f"Service Layer write error {resp.status_code}: {resp.text[:300]}"
+                )
+            # Service layer usually returns 201 Created with the entity
+            return resp.json() if resp.text else {}
+        raise SapUnavailableError("Service Layer authentication kept failing.")
+
     # ── interface ────────────────────────────────────────────────────────────
     def ping(self) -> dict:
         started = time.time()
@@ -302,6 +319,11 @@ class ServiceLayerBackend(DataBackend):
         rows = rows[:limit]
         columns = list(rows[0].keys()) if rows else (select or [])
         return columns, rows
+
+    def create_entity(self, table_or_entity: str, data: dict) -> dict:
+        """Create a new entity in the SAP Service Layer."""
+        entity = TABLE_TO_ENTITY.get(table_or_entity.upper(), table_or_entity)
+        return self._post(entity, data)
 
 
 def _odata_clause(field: str, op: str, value: Any) -> str:
