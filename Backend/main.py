@@ -10,6 +10,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -150,6 +151,41 @@ async def health():
         "llm": config.MODEL_NAME if config.USE_LLM else "deterministic-planner",
         "knowledge_documents": docs_store.document_count(),
     }
+
+
+@app.post("/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    validate_and_extract(credentials)
+    if not config.GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
+        
+    audio_content = await file.read()
+    
+    files = {
+        "file": (file.filename, audio_content, file.content_type)
+    }
+    data = {
+        "model": "whisper-large-v3",
+        "language": "en"
+    }
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            files=files,
+            data=data,
+            headers=headers,
+            timeout=30.0
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.json()
 
 
 @app.get("/sap/health")

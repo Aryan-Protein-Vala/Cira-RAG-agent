@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Area,
   AreaChart,
@@ -42,17 +43,8 @@ export interface ChartPayload {
   sourceRows?: number
 }
 
-/* Vibrant Neon Palette — high contrast, stunning, modern */
-const COLORS = [
-  '#ff007f', /* Neon Pink */
-  '#00f0ff', /* Electric Cyan */
-  '#8a2be2', /* Neon Purple */
-  '#39ff14', /* Lime Green */
-  '#ffae42', /* Bright Amber */
-  '#ff003c', /* Laser Red */
-  '#9d00ff', /* Deep Neon Violet */
-  '#00ff9d', /* Mint Neon */
-]
+/* Vibrant Neon Palette — dynamically generated for up to 50 distinct items using golden angle */
+const COLORS = Array.from({ length: 50 }).map((_, i) => `hsl(${(i * 137.508) % 360}, 85%, 55%)`)
 
 const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [
   { id: 'bar', label: 'Bar', icon: <BarChart3 size={13} /> },
@@ -144,7 +136,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border/40" vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
-            <YAxis {...axisProps} tickFormatter={compact} width={50} />
+            <YAxis {...axisProps} tickFormatter={compact} width={65} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
             <Bar dataKey={yKey} fill="#818cf8" radius={[6, 6, 0, 0]} maxBarSize={expanded ? 80 : 52} />
           </BarChart>
@@ -152,7 +144,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border/40" vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
-            <YAxis {...axisProps} tickFormatter={compact} width={50} />
+            <YAxis {...axisProps} tickFormatter={compact} width={65} />
             <Tooltip content={<CustomTooltip />} />
             <Line
               type="monotone"
@@ -173,7 +165,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border/40" vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
-            <YAxis {...axisProps} tickFormatter={compact} width={50} />
+            <YAxis {...axisProps} tickFormatter={compact} width={65} />
             <Tooltip content={<CustomTooltip />} />
             <Area type="monotone" dataKey={yKey} stroke="#818cf8" strokeWidth={2.5} fill="url(#areaChartGrad)" />
           </AreaChart>
@@ -239,7 +231,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             </div>
             <button
               onClick={() => setIsExpanded(true)}
-              className="p-1.5 rounded-xl text-rose-100 hover:text-white hover:bg-white/20 transition-colors"
+              className="p-1.5 rounded-xl text-rose-100 hover:text-white hover:bg-white/20 transition-all active:scale-95"
               title="Expand chart"
             >
               <Maximize2 size={13} />
@@ -248,15 +240,14 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
         </div>
         
         <div className="p-4">
-
-        <div className="w-full h-[220px] min-h-[180px]">
-          {renderChart(false)}
-        </div>
+          <div className="w-full h-[320px]">
+            {renderChart(false)}
+          </div>
         </div>
       </div>
 
       {/* Expanded Modal */}
-      {isExpanded && (
+      {isExpanded && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-[100] bg-white animate-in fade-in flex flex-col p-6 md:p-10"
         >
@@ -279,7 +270,8 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

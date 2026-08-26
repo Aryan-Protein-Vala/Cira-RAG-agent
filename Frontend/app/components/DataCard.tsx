@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Search,
   Columns3,
@@ -172,7 +173,7 @@ export function DataCard({
   }
 
   const renderTable = (expanded: boolean) => (
-    <div className="w-full space-y-3">
+    <div className={`w-full ${expanded ? 'h-full flex flex-col gap-3' : 'space-y-3'}`}>
       {/* Head */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-indigo-400/30">
         <div>
@@ -198,15 +199,6 @@ export function DataCard({
           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-500">
             {filteredData.length.toLocaleString()} rows
           </span>
-          {!expanded && (
-            <button
-              onClick={() => setIsExpanded(true)}
-              className="p-1.5 rounded-lg text-blue-200 hover:text-white hover:bg-white/10 transition-colors"
-              title="Expand table"
-            >
-              <Maximize2 size={14} />
-            </button>
-          )}
         </div>
       </div>
 
@@ -230,7 +222,7 @@ export function DataCard({
           <div className="relative">
             <button
               onClick={() => setShowColumnPicker(!showColumnPicker)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-all active:scale-95"
             >
               <Columns3 size={13} /> ({visibleHeaders.length}/{headers.length})
             </button>
@@ -272,7 +264,7 @@ export function DataCard({
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-500 hover:bg-indigo-600 text-white shadow-sm transition-all active:scale-95"
             >
               <Download size={13} /> Export
             </button>
@@ -324,9 +316,9 @@ export function DataCard({
       </div>
 
       {/* Table Data View */}
-      <div className="overflow-x-auto rounded-xl border border-border/40">
+      <div className={`rounded-xl border border-border/40 bg-white ${expanded ? 'flex-1 overflow-auto min-h-0 relative' : 'overflow-auto max-h-[350px] relative'}`}>
         <table className="w-full text-left border-collapse text-xs">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-white shadow-sm">
             <tr className="bg-muted/60 text-muted-foreground border-b border-border/40 font-bold">
               {visibleHeaders.map((header) => {
                 const isSorted = sortKey === header
@@ -394,14 +386,14 @@ export function DataCard({
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={safePage === 0}
-              className="px-2 py-0.5 rounded-lg bg-muted/40 hover:bg-muted disabled:opacity-30 text-foreground font-bold"
+              className="p-1.5 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-all active:scale-95"
             >
               ‹
             </button>
             <button
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
               disabled={safePage >= pageCount - 1}
-              className="px-2 py-0.5 rounded-lg bg-muted/40 hover:bg-muted disabled:opacity-30 text-foreground font-bold"
+              className="p-1.5 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-all active:scale-95"
             >
               ›
             </button>
@@ -443,8 +435,8 @@ export function DataCard({
             {!isExpanded && (
               <button
                 onClick={() => setIsExpanded(true)}
-                className="p-1.5 rounded-lg text-purple-800 hover:text-purple-950 hover:bg-purple-900/10 transition-colors"
-                title="Expand table"
+                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all active:scale-95"
+                title="Expand view"
               >
                 <Maximize2 size={14} />
               </button>
@@ -458,7 +450,7 @@ export function DataCard({
       </div>
 
       {/* Fullscreen Expand Modal */}
-      {isExpanded && (
+      {isExpanded && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-[100] bg-white animate-in fade-in flex flex-col p-6 md:p-10"
         >
@@ -469,17 +461,18 @@ export function DataCard({
               </h3>
               <button
                 onClick={() => setIsExpanded(false)}
-                className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-900 transition-colors"
+                className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-900 transition-all active:scale-95"
                 title="Close fullscreen"
               >
                 <X size={24} />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-hidden flex flex-col pb-4">
               {renderTable(true)}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

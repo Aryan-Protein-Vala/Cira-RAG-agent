@@ -58,6 +58,8 @@ def _str(name: str, default: str = "") -> str:
 # Data source selection
 #   auto      -> HANA, then Service Layer, then simulator (default)
 #   hana      -> HANA only (fail loudly if unreachable)
+
+GROQ_API_KEY = _str("GROQ_API_KEY")
 #   mssql     -> Microsoft SQL Server only
 #   service   -> SAP B1 Service Layer (OData) only
 #   simulator -> local SQLite SAP-B1-shaped sandbox (offline development)

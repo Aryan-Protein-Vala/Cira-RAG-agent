@@ -76,13 +76,9 @@ function newSessionId(): string {
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Login Screen                                                               */
 /* ────────────────────────────────────────────────────────────────────────── */
-function LoginScreen({
-  onLogin,
-}: {
-  onLogin: (user: { employee_id: string; name: string }, token: string) => void
-}) {
-  const [employee, setEmployee] = useState('EMP-20481')
-  const [password, setPassword] = useState('admin123')
+function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void }) {
+  const [employee, setEmployee] = useState('')
+  const [password, setPassword] = useState('')
   const [companyDb, setCompanyDb] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -124,8 +120,19 @@ function LoginScreen({
 
       <div className="w-full max-w-md bg-card rounded-3xl p-8 shadow-2xl relative z-10 space-y-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <RobotMascot size="md" interactive isTalking />
+          <div className="flex items-center gap-4">
+            <div className="relative w-[50px] h-[50px] rounded-[18px] bg-[#f3b8b7] shadow-[5px_6px_11px_#bfbac1,-3px_-3px_9px_#fbf7f9] flex-shrink-0 animate-fly-in-left">
+              <div className="absolute left-[24px] -top-[9px] w-[2px] h-[10px] bg-[#6f7ea8] after:content-[''] after:absolute after:-top-[3px] after:-left-[2px] after:w-[6px] after:h-[6px] after:rounded-full after:bg-[#7ea4ee]"></div>
+              <div className="absolute top-[11px] left-[8px] w-[34px] h-[22px] rounded-lg bg-[#e8edf7] flex justify-evenly items-center shadow-[inset_1px_1px_3px_#c1c7d4]">
+                 <i className="w-[5px] h-[5px] rounded-full bg-[#526793]" />
+                 <i className="w-[5px] h-[5px] rounded-full bg-[#526793]" />
+              </div>
+              <div className="absolute left-[13px] bottom-[6px] flex gap-[4px]">
+                <b className="w-[5px] h-[4px] rounded bg-[#7384b0]" />
+                <b className="w-[5px] h-[4px] rounded bg-[#7384b0]" />
+                <b className="w-[5px] h-[4px] rounded bg-[#7384b0]" />
+              </div>
+            </div>
             <div>
               <h2 className="text-xl font-extrabold text-foreground tracking-tight">Cinntra / CIRA</h2>
               <span className="text-[11px] font-bold text-indigo-500 tracking-wider uppercase">Enterprise Intelligence</span>
@@ -192,7 +199,7 @@ function LoginScreen({
           <button
             type="submit"
             disabled={busy}
-            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
           >
             {busy ? 'Signing in…' : 'Sign in securely'} <ArrowUp size={16} className="rotate-45" />
           </button>
@@ -351,6 +358,38 @@ export default function Page() {
   const [attachment, setAttachment] = useState<{ name: string; text: string } | null>(null)
   const [globalSearch, setGlobalSearch] = useState('')
 
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState<string>('')
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+
+  // Speech to Text State
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const existingInputRef = useRef('')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+
+  const handleRename = async (id: string, newTitle: string) => {
+    setEditingId(null)
+    const title = newTitle.trim()
+    if (!title) return
+    setSessions(cur => cur.map(s => s.id === id ? { ...s, title } : s))
+    if (activeId === id) setActiveTitle(title)
+    try {
+      await api(`/session/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+    } catch {
+       // ignore
+    }
+  }
+
   const autoScrollRef = useRef(true)
   const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -457,6 +496,128 @@ export default function Page() {
     }
   }, [messages, isThinking])
 
+  // Speech to Text Logic
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+      mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop())
+    }
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    setIsRecording(false)
+  }, [])
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      stopRecording()
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      
+      // Audio Visualizer Setup
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      audioContextRef.current = audioContext
+      const analyser = audioContext.createAnalyser()
+      const source = audioContext.createMediaStreamSource(stream)
+      source.connect(analyser)
+      analyser.fftSize = 256
+      
+      const bufferLength = analyser.frequencyBinCount
+      const dataArray = new Uint8Array(bufferLength)
+
+      const drawWaveform = () => {
+        if (!canvasRef.current) return
+        const canvas = canvasRef.current
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        
+        const width = canvas.width
+        const height = canvas.height
+        
+        analyser.getByteTimeDomainData(dataArray)
+        
+        ctx.fillStyle = 'transparent'
+        ctx.clearRect(0, 0, width, height)
+        
+        ctx.lineWidth = 2
+        ctx.strokeStyle = '#6366f1' // indigo-500
+        ctx.beginPath()
+        
+        const sliceWidth = width * 1.0 / bufferLength
+        let x = 0
+        
+        for (let i = 0; i < bufferLength; i++) {
+          const v = dataArray[i] / 128.0
+          const y = v * height / 2
+          
+          if (i === 0) {
+            ctx.moveTo(x, y)
+          } else {
+            ctx.lineTo(x, y)
+          }
+          
+          x += sliceWidth
+        }
+        
+        ctx.lineTo(canvas.width, canvas.height / 2)
+        ctx.stroke()
+        
+        animationFrameRef.current = requestAnimationFrame(drawWaveform)
+      }
+
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+      existingInputRef.current = input
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data)
+        }
+      }
+      
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+          const formData = new FormData()
+          formData.append('file', blob, 'audio.webm')
+  
+          setIsTranscribing(true)
+          try {
+            const response = await fetch(`${API_BASE}/transcribe`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${sessionToken}`,
+              },
+              body: formData,
+            })
+            const data = await response.json()
+          if (data.text) {
+            setInput(existingInputRef.current ? existingInputRef.current + ' ' + data.text : data.text)
+          }
+        } catch (err) {
+          console.error('Groq transcription error:', err)
+          showToast('Failed to transcribe audio', 'error')
+        } finally {
+          setIsTranscribing(false)
+        }
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+      
+      // Start visualization immediately
+      drawWaveform()
+      
+    } catch (err) {
+      showToast('Microphone access denied', 'error')
+    }
+  }
+
   // Submit Query to Chat
   const submitQuery = async (queryText?: string) => {
     const value = (queryText || input).trim()
@@ -473,6 +634,26 @@ export default function Page() {
       chatTitle = value.slice(0, 30) + (value.length > 30 ? '…' : '')
       setActiveTitle(chatTitle)
       setSessions((current) => [{ id: currentSessionId, title: chatTitle, date: 'Today' }, ...current])
+
+      // Asynchronously generate title
+      api('/generate_title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: value }),
+      })
+      .then(res => res.json())
+      .then(data => {
+         if (data.title) {
+            setActiveTitle(data.title)
+            setSessions(cur => cur.map(s => s.id === currentSessionId ? { ...s, title: data.title } : s))
+            api(`/session/${currentSessionId}`, {
+               method: 'PUT',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ title: data.title }),
+            }).catch(console.error)
+         }
+      })
+      .catch(console.error)
     }
 
     const sessionId = currentSessionId
@@ -696,65 +877,114 @@ export default function Page() {
           setProfileName(user.name)
           setSessionToken(token)
           setLoggedIn(true)
+          localStorage.setItem('cira-token', token)
+          localStorage.setItem('cira-emp-id', user.employee_id)
+          localStorage.setItem('cira-profile-name', user.name)
         }}
       />
     )
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#fafafa] select-none font-sans relative p-4 gap-4">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#fafafa] select-none font-sans relative p-0 md:p-4 md:gap-4">
+
+      {/* ── Mobile Sidebar Overlay Backdrop ── */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
 
       {/* ── Retractable Left Sidebar ── */}
-      <aside className="group w-16 hover:w-64 bg-white border border-gray-200/60 rounded-3xl flex flex-col pt-6 pb-4 flex-shrink-0 z-50 transition-all duration-300 overflow-hidden shadow-xl shadow-gray-200/50">
+      <aside className={`group fixed md:relative h-full md:h-auto ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0 w-64 md:w-16'} md:hover:w-64 bg-white md:border border-gray-200/60 md:rounded-3xl flex flex-col pt-6 pb-4 flex-shrink-0 z-50 transition-all duration-300 overflow-hidden shadow-xl shadow-gray-200/50`}>
         {/* Profile Area */}
-        <div
-          className="flex items-center gap-3 mb-8 px-4"
-        >
-          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-blue-100">
-            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Cira&backgroundColor=transparent" alt="Cira" className="w-full h-full object-cover p-1" />
+        <div className="flex items-center gap-3 mb-8 px-4">
+          <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+            <img src='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25"><rect x="4" y="8" width="4" height="12" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.48" /><rect x="10" y="3" width="4" height="19" rx="2" fill="%23818cf8" transform="skewX(-16)" /><rect x="16" y="6" width="4" height="15" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.75" /></svg>' alt="Cira" className="w-full h-full object-cover p-1" />
           </div>
-          <div className="flex-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden">
+          <div className="flex-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden">
             <h3 className="text-sm font-semibold text-gray-900 truncate">Cira</h3>
           </div>
-          <ChevronLeft size={16} className="text-gray-400 group-hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0" />
+          <button onClick={() => setIsMobileSidebarOpen(false)} className="md:hidden p-1 text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={20} />
+          </button>
+          <ChevronLeft size={16} className="hidden md:block text-gray-400 group-hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0" />
         </div>
 
-        {/* Top Nav */}
-        <nav className="space-y-1 mb-8 px-3">
+        <nav className="space-y-1 mb-8 px-2">
           <button
-            className="w-full flex items-center gap-3 px-2 py-2 text-sm font-semibold bg-gray-100/80 hover:bg-gray-100 rounded-xl text-gray-900 overflow-hidden transition-colors"
+            className="w-full flex items-center gap-2 px-2 py-2.5 text-sm font-bold text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all active:scale-[0.98]"
             onClick={() => selectChat('new', 'New conversation')}
             title="New Chat"
           >
-            <MessageSquare size={16} className="flex-shrink-0 text-blue-600" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">New Chat</span>
+            <div className="w-8 flex items-center justify-center flex-shrink-0">
+              <Plus size={18} />
+            </div>
+            <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">New Chat</span>
           </button>
         </nav>
 
         {/* Chat History List */}
-        <div className="flex-1 overflow-y-auto scrollbar-none px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="flex-1 overflow-y-auto scrollbar-none px-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
           <div className="mb-6">
             <h4 className="px-2 text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">History</h4>
             <div className="space-y-0.5">
-              {sessions.map((s) => (
-                <div
-                  key={s.id}
-                  className="group/item flex items-center justify-between px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors"
-                  onClick={() => selectChat(s.id, s.title)}
-                >
-                  <span className="truncate flex-1 pr-2">{s.title}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSessions((cur) => cur.filter((item) => item.id !== s.id))
-                      if (activeId === s.id) selectChat('new', 'New conversation')
-                    }}
-                    className="opacity-0 group-hover/item:opacity-100 p-1 hover:text-rose-500 transition-opacity flex-shrink-0"
+              {sessions.map((s) => {
+                const isEditing = editingId === s.id
+                return (
+                  <div
+                    key={s.id}
+                    className="group/item relative flex items-center justify-between px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors"
+                    onClick={() => !isEditing && selectChat(s.id, s.title)}
                   >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+                    {isEditing ? (
+                      <input
+                        autoFocus
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRename(s.id, editTitle)
+                          if (e.key === 'Escape') setEditingId(null)
+                        }}
+                        onBlur={() => handleRename(s.id, editTitle)}
+                        className="flex-1 w-full bg-white border border-indigo-300 rounded px-1.5 py-0.5 text-sm outline-none"
+                      />
+                    ) : (
+                      <span className="truncate pr-2 w-full">{s.title}</span>
+                    )}
+                    {!isEditing && (
+                      <div className="relative flex-shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMenuOpenId(menuOpenId === s.id ? null : s.id)
+                          }}
+                          className={`p-1 hover:bg-gray-200 rounded-md transition-all ${menuOpenId === s.id ? 'opacity-100 bg-gray-200' : 'opacity-0 group-hover/item:opacity-100'}`}
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                        {menuOpenId === s.id && (
+                          <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-28 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-50">
+                            <button
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                              onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditTitle(s.title); setMenuOpenId(null); }}
+                            >
+                              <Pencil size={12} /> Rename
+                            </button>
+                            <button
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-rose-50 text-rose-600 flex items-center gap-2"
+                              onClick={(e) => { e.stopPropagation(); setMenuOpenId(null); setSessionToDelete(s) }}
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
               {sessions.length === 0 && (
                 <div className="px-2 py-2 text-xs text-gray-400">No recent chats</div>
               )}
@@ -763,45 +993,55 @@ export default function Page() {
         </div>
 
         {/* Settings & Logout */}
-        <div className="mt-auto pt-4 px-3 space-y-1">
+        <div className="mt-auto pt-4 px-2 space-y-1">
           <button
             onClick={() => setShowProfile(true)}
-            className="w-full flex items-center gap-3 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"
+            className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"
             title="Settings"
           >
-            <MoreHorizontal size={16} className="flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Settings</span>
+            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+              <MoreHorizontal size={16} />
+            </div>
+            <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Settings</span>
           </button>
           
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-2 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors overflow-hidden"
+            className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors overflow-hidden"
             title="Log Out"
           >
-            <LogOut size={16} className="flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Log Out</span>
+            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+              <LogOut size={16} />
+            </div>
+            <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Sign out</span>
           </button>
         </div>
       </aside>
 
       {/* ── Main Chat Shell ── */}
-      <main className="flex-1 h-full flex flex-col bg-white border border-gray-200/60 rounded-3xl overflow-hidden relative z-10 shadow-xl shadow-gray-200/50">
+      <main className="flex-1 h-full flex flex-col bg-white md:border border-gray-200/60 md:rounded-3xl overflow-hidden relative z-10 md:shadow-xl shadow-gray-200/50">
+        <button 
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className="md:hidden absolute top-4 left-4 z-20 p-2 text-gray-600 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-100"
+        >
+          <Menu size={20} />
+        </button>
         <div className="flex-1 overflow-hidden flex flex-col relative">
 
           {/* Scrollable Content Area */}
-          <div className="w-full h-full flex flex-col pt-12 pb-6 px-8 overflow-y-auto scrollbar-none" ref={scrollRef} onScroll={handleScroll}>
+          <div className="w-full h-full flex flex-col pt-16 md:pt-12 pb-6 px-4 md:px-8 overflow-y-auto scrollbar-none" ref={scrollRef} onScroll={handleScroll}>
             <div className="w-full mx-auto space-y-6">
 
               {/* Empty State / Welcome Board */}
               {messages.length === 0 && (
-                <div className="flex flex-col pt-8 pb-12 animate-fly-in-up w-full max-w-3xl mx-auto">
-                  <div className="mb-10 space-y-3 pl-2">
-                    <h1 className="text-5xl font-semibold tracking-tight text-gray-900 flex items-center justify-center gap-3">
-                      <span className="bg-blue-100/60 px-5 py-2 rounded-[2rem] text-[#3c78a0] inline-block -rotate-2 hover:rotate-1 transition-transform duration-300 shadow-sm">
+                <div className="flex flex-col pt-4 md:pt-8 pb-12 animate-fly-in-top w-full max-w-3xl mx-auto">
+                  <div className="mb-10 space-y-3 pl-0 md:pl-2">
+                    <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-gray-900 flex items-center justify-center gap-2 md:gap-3 flex-wrap">
+                      <span className="bg-blue-100/60 px-4 md:px-5 py-2 rounded-[2rem] text-[#3c78a0] inline-block -rotate-2 hover:rotate-1 transition-transform duration-300 shadow-sm text-center">
                         Welcome to Cira! 👋
                       </span>
                     </h1>
-                    <h2 className="text-[40px] leading-tight font-semibold tracking-tight text-gray-400 text-center">
+                    <h2 className="text-2xl md:text-[40px] leading-tight font-semibold tracking-tight text-gray-400 text-center">
                       How can I help you today?
                     </h2>
                   </div>
@@ -813,7 +1053,7 @@ export default function Page() {
                     {/* Database Query Card */}
                     <div
                       onClick={() => submitQuery('Show candidate database with SAP HANA skills')}
-                      className="col-span-1 bg-gradient-to-br from-[#f8faff] to-[#f0f5ff] rounded-2xl p-4 shadow-md border border-blue-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-blue-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      className="col-span-1 bg-gradient-to-br from-[#f8faff] to-[#f0f5ff] rounded-2xl p-4 shadow-md border border-blue-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-blue-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-left"
                       style={{ animationDelay: '100ms' }}
                     >
                       <div className="flex items-center gap-3 mb-2">
@@ -831,7 +1071,7 @@ export default function Page() {
                     {/* Financial Ledger Card */}
                     <div
                       onClick={() => submitQuery('Summarize all open invoices from last quarter')}
-                      className="col-span-1 bg-gradient-to-br from-[#fffaf5] to-[#fff3e5] rounded-2xl p-4 shadow-md border border-orange-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-orange-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      className="col-span-1 bg-gradient-to-br from-[#fffaf5] to-[#fff3e5] rounded-2xl p-4 shadow-md border border-orange-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-orange-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-right"
                       style={{ animationDelay: '200ms', opacity: 0, animationFillMode: 'forwards' }}
                     >
                       <div className="flex items-center gap-3 mb-2">
@@ -849,7 +1089,7 @@ export default function Page() {
                     {/* Stock Report Card */}
                     <div
                       onClick={() => submitQuery('Give me a pie chart of stock value by warehouse')}
-                      className="col-span-1 bg-gradient-to-br from-[#f5fbf7] to-[#e6f7eb] rounded-2xl p-4 shadow-md border border-emerald-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-emerald-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      className="col-span-1 bg-gradient-to-br from-[#f5fbf7] to-[#e6f7eb] rounded-2xl p-4 shadow-md border border-emerald-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-emerald-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-bottom"
                       style={{ animationDelay: '300ms', opacity: 0, animationFillMode: 'forwards' }}
                     >
                       <div className="flex items-center gap-3 mb-2">
@@ -867,7 +1107,7 @@ export default function Page() {
                     {/* Interview Ratings Card */}
                     <div
                       onClick={() => submitQuery('Top 10 candidates by interview rating')}
-                      className="col-span-1 bg-gradient-to-br from-[#fbf5ff] to-[#f4e6ff] rounded-2xl p-4 shadow-md border border-purple-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-purple-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-up"
+                      className="col-span-1 bg-gradient-to-br from-[#fbf5ff] to-[#f4e6ff] rounded-2xl p-4 shadow-md border border-purple-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-purple-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-bottom"
                       style={{ animationDelay: '400ms', opacity: 0, animationFillMode: 'forwards' }}
                     >
                       <div className="flex items-center gap-3 mb-2">
@@ -906,20 +1146,20 @@ export default function Page() {
                       <>
                         {message.content && (
                           <div
-                            className={`text-base leading-relaxed ${message.role === 'user'
-                                ? 'bg-gradient-to-br from-pink-500 to-rose-500 text-white font-bold px-6 py-4 rounded-[1.5rem] rounded-br-sm shadow-lg inline-block max-w-[85%] md:max-w-[75%]'
-                                : 'bg-blue-50/50 border border-blue-100 text-gray-800 font-medium px-6 py-5 rounded-[1.5rem] shadow-sm w-full block'
+                            className={`text-[15px] md:text-base leading-relaxed ${message.role === 'user'
+                                ? 'bg-gradient-to-br from-pink-500 to-rose-500 text-white font-bold px-5 py-3 md:px-6 md:py-4 rounded-[1.5rem] rounded-br-sm shadow-lg inline-block max-w-[90%] md:max-w-[75%]'
+                                : 'bg-blue-50/50 border border-blue-100 text-gray-800 font-medium px-5 py-4 md:px-6 md:py-5 rounded-[1.5rem] shadow-sm inline-block w-fit max-w-[95%] md:max-w-[85%]'
                               }`}
                             style={{ fontFamily: "'Outfit', sans-serif" }}
                           >
                             <div className="chat-markdown">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.content}
+                              </ReactMarkdown>
+                              {message.role === 'assistant' && isThinking && index === messages.length - 1 && (
+                                <span className="inline-block w-2.5 h-4 ml-1 bg-indigo-500 animate-pulse rounded-sm align-middle" />
+                              )}
                             </div>
-                            {message.role === 'assistant' && isThinking && index === messages.length - 1 && (
-                              <div className="mt-2">
-                                <span className="inline-block w-2 h-3.5 bg-blue-500 animate-pulse rounded-sm" />
-                              </div>
-                            )}
                           </div>
                         )}
                         {message.error && (
@@ -944,8 +1184,8 @@ export default function Page() {
           </div>
 
           {/* ── Chat Composer (Fixed Flow) ── */}
-          <div className="w-full px-4 md:px-8 py-6 flex justify-center flex-shrink-0 z-30">
-            <div className="w-full max-w-4xl flex items-center gap-2">
+          <div className="w-full px-2 md:px-8 py-4 md:py-6 flex justify-center flex-shrink-0 z-30">
+            <div className="w-full max-w-4xl flex items-center gap-1.5 md:gap-2">
               
               <button
                 onClick={() => fileRef.current?.click()}
@@ -955,16 +1195,22 @@ export default function Page() {
               </button>
               
               <button
-                className="w-12 h-12 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center hover:bg-black transition-colors flex-shrink-0"
+                onClick={toggleRecording}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
+                  isRecording 
+                    ? 'bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/20' 
+                    : 'bg-[#1a1a1a] text-white hover:bg-black'
+                }`}
+                title={isRecording ? 'Stop Recording' : 'Start Recording'}
               >
-                <Mic size={20} />
+                {isRecording ? <Square size={20} className="fill-current" /> : <Mic size={20} />}
               </button>
 
-              <div className="flex-1 bg-[#1a1a1a] rounded-full flex items-center px-6 h-12 overflow-hidden relative">
+              <div className="flex-1 bg-[#1a1a1a] rounded-full flex items-center px-4 md:px-6 h-12 overflow-hidden relative">
                 {attachment && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white text-xs font-semibold whitespace-nowrap mr-3">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white text-xs font-semibold whitespace-nowrap mr-2 md:mr-3">
                     <Paperclip size={12} />
-                    <span className="truncate max-w-[100px]">{attachment.name}</span>
+                    <span className="truncate max-w-[60px] md:max-w-[100px]">{attachment.name}</span>
                     <button onClick={() => setAttachment(null)} className="hover:text-rose-400 font-bold ml-1">×</button>
                   </div>
                 )}
@@ -996,8 +1242,15 @@ export default function Page() {
                       submitQuery()
                     }
                   }}
-                  placeholder="Start typing..."
-                  className="flex-1 bg-transparent border-0 text-[15px] font-medium text-white placeholder:text-gray-400 focus:outline-none min-w-0 h-full"
+                  placeholder={isTranscribing ? "Transcribing..." : "Start typing..."}
+                  className={`flex-1 bg-transparent border-0 text-[15px] font-medium text-white placeholder:text-gray-400 focus:outline-none min-w-0 h-full ${isRecording ? 'hidden' : 'block'}`}
+                />
+                
+                <canvas 
+                  ref={canvasRef}
+                  className={`flex-1 h-8 ${isRecording ? 'block' : 'hidden'}`}
+                  width={400}
+                  height={32}
                 />
               </div>
 
@@ -1012,7 +1265,11 @@ export default function Page() {
                 <button
                   onClick={() => submitQuery()}
                   disabled={!input.trim()}
-                  className="w-10 h-10 rounded-full bg-gray-100 text-gray-400 disabled:opacity-50 hover:bg-gray-200 hover:text-gray-600 transition-colors flex items-center justify-center flex-shrink-0"
+                  className={`w-10 h-10 rounded-full transition-all flex items-center justify-center flex-shrink-0 ${
+                    !input.trim()
+                      ? 'bg-gray-100 text-gray-400 opacity-50 cursor-not-allowed'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:scale-105 shadow-md active:scale-95'
+                  }`}
                 >
                   <ArrowUp size={16} className="rotate-90" />
                 </button>

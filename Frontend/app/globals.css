@@ -373,11 +373,42 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes chibi-float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1deg); } }
 
 /* Entrance Animations */
-@keyframes flyInUp {
-  0% { opacity: 0; transform: translateY(40px) scale(0.95); }
+@keyframes flyInLeft {
+  0% { opacity: 0; transform: translateX(-200px) rotate(-15deg); }
+  60% { opacity: 1; transform: translateX(20px) rotate(5deg); }
+  100% { opacity: 1; transform: translateX(0) rotate(0deg); }
+}
+.animate-fly-in-left {
+  opacity: 0;
+  animation: flyInLeft 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes flyInRight {
+  0% { opacity: 0; transform: translateX(200px) rotate(15deg); }
+  60% { opacity: 1; transform: translateX(-20px) rotate(-5deg); }
+  100% { opacity: 1; transform: translateX(0) rotate(0deg); }
+}
+.animate-fly-in-right {
+  opacity: 0;
+  animation: flyInRight 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes flyInBottom {
+  0% { opacity: 0; transform: translateY(200px) scale(0.8); }
+  60% { opacity: 1; transform: translateY(-20px) scale(1.05); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-.animate-fly-in-up {
+.animate-fly-in-bottom {
   opacity: 0;
-  animation: flyInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: flyInBottom 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes flyInTop {
+  0% { opacity: 0; transform: translateY(-200px) scale(0.8); }
+  60% { opacity: 1; transform: translateY(20px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-fly-in-top {
+  opacity: 0;
+  animation: flyInTop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
