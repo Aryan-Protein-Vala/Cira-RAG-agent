@@ -116,6 +116,7 @@ and known date/amount/party columns per table for automatic charting.
 | `sap_token` threaded through the agent but unused; `MOCK_TENANTS` half-wired | Dead parameter removed, tenant registry env-driven with per-tenant overrides and strict lookup |
 | Money shown as `1,234,567.89` while the prompt promised ₹12,34,567 | `format_money()` (backend summaries) and `lib/format.ts` (tables, axes, tooltips) do it in code, not by asking nicely |
 | Lint script (`eslint .`) exited 127 — eslint wasn't even a dependency; no CI at all | Flat `eslint.config.mjs` + deps, `ops/github-actions-ci.yml` (pytest, ruff, tsc, eslint, build, credential-default grep) |
+| Multi-tenant admin panel: hard-coded `/admin/login` backdoor, plaintext SAP passwords at rest, HANA creds reused for the Service Layer, any-host SSRF with no validation, and `/auth/login` refusing **all** sign-ins until a panel row existed (9 tests red) | Feature kept, rebuilt: role-gated `/admin` router, `env:`/`enc:` secret policy, separate Service Layer credentials, target validation + metadata-IP refusal, audit on every change, registry-aware sign-in (21 new tests) |
 | `migrate_db.py --check` always exited 0, even when simulated | Validates config, prints why each source was rejected, non-zero exit when it isn't live (`--require-live`) |
 
 
@@ -341,6 +342,46 @@ Untracked on purpose (still on disk in this checkout, but out of the repo):
 (superseded copy of the UI) and the `WhatsApp Image …jpeg` design drop-ins. `Backend/.env`,
 `tunnel.env`, `*.db` and `Backend/data/` are ignored as before.
 
+## 8b. Admin panel — registering company DBs at runtime
+
+`Frontend → /admin` (and `Backend → /admin/*`) is the multi-tenant registry: each row
+is a company DB (SAP HANA schema + Service Layer endpoint) an employee may sign in to.
+
+```
+GET    /admin/connections              list (masked — no secret material, ever)
+POST   /admin/connections              register           { company_db, hana_address, hana_port,
+                                                            hana_user, hana_password, sl_user?, sl_password? }
+POST   /admin/connections/test         try a target before saving it (nothing written)
+POST   /admin/connections/{id}/test    try a saved row (real HANA login + table count)
+PUT    /admin/connections/{id}         update, or enable/pause a company DB
+DELETE /admin/connections/{id}         remove it
+GET    /admin/overview                 which sources are enabled per tenant, and the policy flags
+```
+
+Rules the panel enforces (all of these were missing in its first cut):
+* **No separate admin login.** `/admin/*` requires the `admin` role from a normal
+  `/auth/login` token; the previous `POST /admin/login` compared the password against a
+  literal in source and handed out the role to anyone who had read the repo.
+* **Secrets are write-only.** Paste the password and CIRA encrypts it at rest with
+  `CIRA_SECRET_KEY` (needs `cryptography`), or store `env:VAR_NAME` to keep nothing on
+  disk at all. Plaintext is refused unless `CIRA_ALLOW_PLAINTEXT_SECRETS=true`, and then
+  it is flagged in every listing as `hana_secret_source: "plaintext"`. An `env:` reference
+  that does not resolve is reported (`hana_secret_resolved: false`) instead of failing
+  mysteriously at query time.
+* **Service Layer credentials are separate fields.** Reusing the HANA user/password for
+  the Service Layer login is wrong (different principals) and spreads the secret to a
+  second endpoint; the panel asks for `sl_user` / `sl_password` explicitly.
+* **Targets are validated.** Company DB must be identifier-shaped (it is interpolated
+  into schema-qualified SQL, and `hana_backend.sql_ident` re-validates it), ports are
+  range-checked, and loopback / link-local / cloud-metadata addresses are refused so a
+  stolen admin token is not a free SSRF (`CIRA_ALLOW_LOOPBACK_TARGETS=true` for the
+  on-the-DB-host case).
+* **Every change is audited** (`tenant_created/updated/deleted`, no secret material).
+* Sign-in checks the registry (env `CIRA_TENANTS` + enabled panel rows + the deployment
+  default), so an unknown company DB is a 403 rather than a silent fall-through. The
+  first cut required a panel row specifically, which locked every employee out of a fresh
+  deployment. Set `CIRA_REQUIRE_REGISTERED_COMPANY_DB=true` to require an explicit entry.
+
 ## 9. Security model, and what is still open
 
 **In place now**
@@ -361,12 +402,16 @@ Untracked on purpose (still on disk in this checkout, but out of the repo):
    user, so *any* signed-in employee can see *any* table the grantor allowed (salaries,
    `OUSR`). Row/column-level security needs per-user SAP identities or a view layer per
    role — `exchange_for_sap_token()` in `auth.py` is the documented seam and is still a stub.
-3. **Rotate three credentials today.** Committed in `8987ed4` (so they are in history even
+3. **Rotate these credentials today.** Committed in `8987ed4` (so they are in history even
    though the files are now clean):
    * the **RDP machine's login password**, in plain text, in `start_ssh_tunnel.bat` — plus its
      public IP and username;
    * the **SQL Server `sa` password** for the live company DB, as a default in `config.py`;
-   * the **HANA/Service Layer public IP** used as a default in `config.py` / `.env.example`.
+   * the **HANA/Service Layer public IP** used as a default in `config.py` / `.env.example`;
+   * the **`admin` / demo password pair** — it came back as a hard-coded check inside
+     `POST /admin/login` in the multi-tenant admin commit (b030d30). That endpoint has been
+     removed here, but the password itself must still be rotated wherever it was reused, and
+     `CIRA_ADMIN_PASSWORD` should be a fresh value.
 
    Deleting them from the working tree does *not* un-leak them. Rotate on the server first,
    then rewrite history if the repo is shared or public:

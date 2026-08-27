@@ -38,6 +38,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
+import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { RobotMascot } from './components/RobotMascot'
@@ -391,6 +392,7 @@ export default function Page() {
   // Which SAP source is answering (live HANA / Service Layer / sandbox). Driven
   // by the `backend` SSE event the agent already emits.
   const [activeBackend, setActiveBackend] = useState<BackendInfo | null>(null)
+  const [roles, setRoles] = useState<string[]>([])
 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -493,6 +495,15 @@ export default function Page() {
     localStorage.setItem('cira-theme', nextTheme)
     document.documentElement.className = nextTheme
   }
+
+  // Who is signed in (roles drive the admin-panel link; the API enforces them anyway)
+  useEffect(() => {
+    if (!loggedIn || !sessionToken) return
+    api('/auth/me')
+      .then((res) => res.json())
+      .then((me) => setRoles(me.roles || []))
+      .catch(() => setRoles([]))
+  }, [loggedIn, sessionToken, api])
 
   // Load Sessions
   useEffect(() => {
@@ -1036,6 +1047,21 @@ export default function Page() {
               {theme === 'dark' ? 'Light mode' : 'Dark mode'}
             </span>
           </button>
+          {roles.includes('admin') && (
+            <Link
+              href="/admin"
+              className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"
+              title="Company databases (admin)"
+            >
+              <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+                <ShieldCheck size={16} />
+              </div>
+              <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+                Admin panel
+              </span>
+            </Link>
+          )}
+
           <button
             onClick={() => setShowProfile(true)}
             className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"

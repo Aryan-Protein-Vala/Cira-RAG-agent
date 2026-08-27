@@ -222,6 +222,27 @@ TENANTS = build_tenants()
 MOCK_TENANTS = TENANTS
 
 
+def normalise_tenant_key(name: str) -> str:
+    """Public alias — the admin API needs the same key rules as the registry."""
+    return _normalise_tenant_key(name)
+
+
+def register_tenant(company_db: str, overrides: dict) -> None:
+    """Add/replace a runtime tenant (used by tenants.py when the admin panel saves one)."""
+    key = _normalise_tenant_key(company_db)
+    entry = dict(TENANTS.get(key, {}))
+    entry.setdefault("COMPANY_DB", (company_db or "").strip() or DEFAULT_COMPANY_DB)
+    entry.update(overrides or {})
+    TENANTS[key] = entry
+
+
+def forget_tenant(company_db: str) -> None:
+    """Drop a runtime tenant. The env-derived default tenant can never be removed."""
+    key = _normalise_tenant_key(company_db)
+    if key and key != DEFAULT_TENANT_NAME:
+        TENANTS.pop(key, None)
+
+
 def tenant_for(company_db: str) -> dict | None:
     """Look up a tenant; unknown company DBs resolve to *nothing* (never a
     silent fall-through to whichever global config happens to be set)."""
@@ -392,6 +413,20 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 LOG_LEVEL = _str("CIRA_LOG_LEVEL", "INFO").upper()
 SCHEMA_CACHE_TTL_S = _int("CIRA_SCHEMA_CACHE_TTL_S", 900)
 HEALTH_CACHE_TTL_S = _int("CIRA_HEALTH_CACHE_TTL_S", 10)
+TENANT_CACHE_TTL_S = _int("CIRA_TENANT_CACHE_TTL_S", 30)
+
+# ── Tenant registry (admin panel) ─────────────────────────────────────────────
+# Secrets saved through /admin/connections must be `env:VAR` or `enc:<fernet>`.
+# Plaintext is a deliberate, loud, opt-in escape hatch for throwaway demos only.
+ALLOW_PLAINTEXT_SECRETS = _bool("CIRA_ALLOW_PLAINTEXT_SECRETS", False)
+# The admin panel makes the server dial arbitrary host:port pairs. Loopback,
+# link-local and metadata ranges are refused unless this is on (e.g. CIRA runs
+# on the DB host itself).
+ALLOW_LOOPBACK_TARGETS = _bool("CIRA_ALLOW_LOOPBACK_TARGETS", False)
+# When true, employees may only sign in to a company DB that is explicitly
+# registered (env CIRA_TENANTS or the admin panel) — the implicit default tenant
+# stops being enough.
+REQUIRE_REGISTERED_COMPANY_DB = _bool("CIRA_REQUIRE_REGISTERED_COMPANY_DB", False)
 BACKEND_RETRY_S = _int("CIRA_BACKEND_RETRY_S", 60)
 
 
@@ -437,6 +472,16 @@ def validate() -> tuple[list[str], list[str]]:
             "No CIRA_ADMIN_ID/CIRA_ADMIN_PASSWORD configured — the admin sign-in is "
             "disabled. Until a real IdP or an OUSR lookup is wired up, an admin cannot "
             "sign in (and SAP writes stay unavailable)."
+        )
+    if ALLOW_PLAINTEXT_SECRETS:
+        warn.append(
+            "CIRA_ALLOW_PLAINTEXT_SECRETS=true — tenant SAP passwords are stored unencrypted in "
+            f"{DATABASE_PATH}. Use env:VAR_NAME or enc:<token> instead."
+        )
+    if ALLOW_LOOPBACK_TARGETS:
+        warn.append(
+            "CIRA_ALLOW_LOOPBACK_TARGETS=true — the admin panel may point CIRA at loopback/"
+            "metadata addresses. Appropriate only when CIRA runs on the database host."
         )
     if ALLOW_ANY_EMPLOYEE:
         warn.append(

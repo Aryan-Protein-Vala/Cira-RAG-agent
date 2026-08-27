@@ -30,9 +30,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import admin_api
 import audit
 import config
 import docs_store
+import tenants
 from agent import generate_title as agent_generate_title
 from agent import stream_chat_query
 from auth import (
@@ -74,6 +76,14 @@ async def lifespan(app: FastAPI):
         )
 
     await init_db()
+    try:
+        # Admin-panel tenants live in SQLite; merge them into the config registry
+        # so auth, the SQL guard and the drivers all use one lookup.
+        count = await tenants.refresh(force=True)
+        if count:
+            log.info("Registered %d company DB(s) from the admin panel", count)
+    except Exception as exc:
+        log.warning("Could not load admin-panel tenants: %s", exc)
     log.info("CIRA backend starting — data source mode: %s", config.DATA_SOURCE)
     if not config.OPENROUTER_API_KEY:
         log.warning(
@@ -114,7 +124,8 @@ async def lifespan(app: FastAPI):
             task.cancel()
 
 
-app = FastAPI(title="CIRA Chat Backend", version="2.1.0", lifespan=lifespan)
+app = FastAPI(title="CIRA Chat Backend", version="2.2.0", lifespan=lifespan)
+app.include_router(admin_api.router)
 
 # CORS: a wildcard origin combined with allow_credentials is the classic
 # "any website may read your ERP responses" mistake. config.STRICT (default true)
@@ -173,20 +184,6 @@ class RenameRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
-class AdminLoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class CompanyConnectionCreate(BaseModel):
-    company_db: str
-    hana_address: str
-    hana_port: int
-    hana_user: str
-    hana_password: str
-    service_layer_port: int = 50000
-
-
 class TitleRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000)
 
@@ -195,7 +192,29 @@ class TitleRequest(BaseModel):
 # Auth
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/auth/login")
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: LoginRequest):
+    # A company DB must be *registered* — by env (CIRA_TENANTS) or the admin panel.
+    # The first cut of the admin panel required an admin-panel row specifically,
+    # which locked every employee out of a fresh deployment (9 tests failed).
+    company_db = (request.company_db or "").strip()
+    if not company_db:
+        if config.REQUIRE_REGISTERED_COMPANY_DB:
+            audit.event("login_denied", employee_id=request.employee_id,
+                        reason="company_db_required")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Choose a company database to sign in to.",
+            )
+    else:
+        if config.tenant_for(company_db) is None:
+            await tenants.refresh(force=True)      # maybe it was just added in the panel
+        if config.tenant_for(company_db) is None:
+            audit.event("login_denied", employee_id=request.employee_id,
+                        reason="unknown_company_db", company_db=company_db)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="That company DB is not configured for this deployment.",
+            )
     user = authenticate(request.employee_id, request.password, request.company_db)
     if not user:
         audit.event("login_failed", employee_id=request.employee_id,
@@ -205,18 +224,10 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid employee ID or password.",
         )
-    
-    # Check multi-tenant connection
-    from database import CompanyConnection
-    result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == user["company_db"]))
-    conn = result.scalars().first()
-    if not conn:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Company database is not configured on this server.",
-        )
-        
-    minted = create_token(user["employee_id"], user["name"], user["roles"], company_db=user["company_db"])
+    audit.event("login", employee_id=user["employee_id"], company_db=user["company_db"])
+    minted = create_token(
+        user["employee_id"], user["name"], user["roles"], company_db=user["company_db"]
+    )
     return {
         "token": minted["token"],
         "expires_at": minted["expires_at"],
@@ -238,87 +249,7 @@ async def me(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme))
         "roles": ctx.get("roles", []),
         "company_db": ctx.get("company_db"),
         "expires_at": ctx.get("exp"),
-        "company_db": ctx.get("company_db", ""),
     }
-
-
-async def set_tenant_context(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    company_db = ctx.get("company_db")
-    if company_db:
-        from database import CompanyConnection
-        result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == company_db))
-        conn = result.scalars().first()
-        if conn:
-            import config
-            tenant_config = {
-                "HANA_SCHEMA": conn.company_db,
-                "SAP_B1_COMPANY_DB": conn.company_db,
-                "HANA_HOST": conn.hana_address,
-                "HANA_PORT": conn.hana_port,
-                "HANA_USER": conn.hana_user,
-                "HANA_PASSWORD": conn.hana_password,
-                "SAP_B1_HOST": conn.hana_address,
-                "SAP_B1_PORT": conn.service_layer_port,
-                "SAP_B1_USER": conn.hana_user,
-                "SAP_B1_PASSWORD": conn.hana_password,
-            }
-            config.CURRENT_TENANT.set(tenant_config)
-    return ctx
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Admin
-# ─────────────────────────────────────────────────────────────────────────────
-@app.post("/admin/login")
-async def admin_login(request: AdminLoginRequest):
-    if request.username == "admin" and request.password == "asdfghjkl;":
-        minted = create_token("admin", "Administrator", ["admin"], company_db="")
-        return {"token": minted["token"]}
-    raise HTTPException(status_code=401, detail="Invalid admin credentials")
-
-
-@app.get("/admin/connections")
-async def get_connections(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    if "admin" not in ctx.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    from database import CompanyConnection
-    result = await db.execute(select(CompanyConnection))
-    connections = result.scalars().all()
-    return [{"id": c.id, "company_db": c.company_db, "hana_address": c.hana_address, "hana_port": c.hana_port, "hana_user": c.hana_user, "service_layer_port": c.service_layer_port} for c in connections]
-
-
-@app.post("/admin/connections")
-async def create_connection(data: CompanyConnectionCreate, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    if "admin" not in ctx.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    from database import CompanyConnection
-    # Check if exists
-    result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == data.company_db))
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Company DB already exists")
-        
-    conn = CompanyConnection(**data.dict())
-    db.add(conn)
-    await db.commit()
-    await db.refresh(conn)
-    return {"id": conn.id, "company_db": conn.company_db}
-
-
-@app.delete("/admin/connections/{id}")
-async def delete_connection(id: int, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    if "admin" not in ctx.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    from database import CompanyConnection
-    await db.execute(delete(CompanyConnection).where(CompanyConnection.id == id))
-    await db.commit()
-    return {"ok": True}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -347,19 +278,11 @@ async def sap_health(
 ):
     """Backend diagnostics — authenticated, since it names schemas and failures.
 
-
-class WriteRequest(BaseModel):
-    entity: str = Field(..., description="SAP B1 Service Layer entity (e.g. 'BusinessPartners')")
-    table: str = Field("", description="Underlying SAP table name (e.g. 'OCRD')")
-    data: dict = Field(..., description="Field values to write")
-
-
-@app.post("/sap/write")
-async def sap_write(
-    body: WriteRequest,
-    user_context: dict = Depends(set_tenant_context),
-):
-    """Create a new entity record in SAP Business One via the Service Layer."""
+    `force=true` re-probes every configured source (real login attempts); the
+    default answers from a short cache so polling the UI cannot become an ERP
+    login storm.
+    """
+    validate_and_extract(credentials)
     try:
         return await sap.health(force=bool(force))
     except BackendUnavailable as exc:
@@ -381,16 +304,18 @@ async def sap_write(
 async def sap_tables(
     pattern: str = "",
     limit: int = 300,
-    user_context: dict = Depends(set_tenant_context),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
-    return await sap.list_tables(pattern=pattern, limit=min(limit, 2000))
+    validate_and_extract(credentials)
+    return await sap.list_tables(pattern=pattern, limit=min(max(limit, 1), 2000))
 
 
 @app.get("/sap/table/{table_name}")
 async def sap_table(
     table_name: str,
-    user_context: dict = Depends(set_tenant_context),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
+    validate_and_extract(credentials)
     try:
         return await sap.describe_table(table_name, sample_rows=3)
     except SapDataError as exc:
@@ -712,8 +637,8 @@ async def chat_endpoint(
     request: ChatRequest,
     http_request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    user_context: dict = Depends(set_tenant_context),
 ):
+    user_context = validate_and_extract(credentials)
     employee_id = user_context["employee_id"]
     audit.set_context(employee_id=employee_id, session_id=request.session_id,
                       company_db=user_context.get("company_db"))

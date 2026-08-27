@@ -1,250 +1,454 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Database, Plus, Trash2, Key, Server, Lock, LogOut } from 'lucide-react'
+/**
+ * Admin panel — company DB (tenant) registry.
+ *
+ * Differences from the first cut of this page:
+ *  * it no longer posts to a hard-coded `/admin/login` backdoor (that endpoint
+ *    compared the password against a literal in source and minted the admin role
+ *    for anyone who had read the repo). Admins sign in with the normal
+ *    /auth/login and the API enforces the `admin` role on every /admin route.
+ *  * passwords are write-only: the list shows *how* a secret is stored
+ *    (env reference / encrypted / plaintext), never the value.
+ *  * every row can be tested against the real HANA/Service Layer before and
+ *    after saving, and enabled/disabled without deleting it.
+ */
+
+import React, { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { Building2, Check, Eye, Loader2, Plug, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
 
+type Connection = {
+  id: number
+  company_db: string
+  display_name: string
+  enabled: boolean
+  hana_address: string
+  hana_port: number
+  hana_user: string
+  service_layer_port: number
+  sl_user: string
+  hana_secret_source: string
+  sl_secret_source: string
+  updated_at?: string | null
+}
+
+type TestResult = {
+  ok?: boolean
+  tables_visible?: number
+  checks?: { target: string; ok: boolean; detail: string }[]
+}
+
+const EMPTY_FORM = {
+  company_db: '',
+  display_name: '',
+  hana_address: '',
+  hana_port: 30013,
+  hana_user: '',
+  hana_password: '',
+  service_layer_port: 50000,
+  sl_user: '',
+  sl_password: '',
+  notes: '',
+}
+
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null)
+  const [who, setWho] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [connections, setConnections] = useState<any[]>([])
-  const [showAdd, setShowAdd] = useState(false)
-  const [formData, setFormData] = useState({
-    company_db: '',
-    hana_address: '',
-    hana_port: 30013,
-    hana_user: '',
-    hana_password: '',
-    service_layer_port: 50000
+  const [rows, setRows] = useState<Connection[]>([])
+  const [envTenants, setEnvTenants] = useState<string[]>([])
+  const [storage, setStorage] = useState<{ encrypted_available: boolean; plaintext_allowed: boolean }>({
+    encrypted_available: true,
+    plaintext_allowed: false,
   })
+  const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [testing, setTesting] = useState<number | 'new' | null>(null)
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
+
+  const api = useCallback(
+    async (path: string, init: RequestInit = {}) => {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(init.headers || {}),
+        },
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body?.detail || `HTTP ${res.status}`)
+      return body
+    },
+    [token],
+  )
 
   useEffect(() => {
-    const stored = localStorage.getItem('cira-admin-token')
-    if (stored) {
-      setToken(stored)
-      loadConnections(stored)
-    }
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('cira-token') : null
+    if (saved) setToken(saved)
   }, [])
 
-  const loadConnections = async (authToken: string) => {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/connections`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      })
-      if (!res.ok) throw new Error('Failed to load connections')
-      const data = await res.json()
-      setConnections(data)
-    } catch (err) {
-      setError('Failed to load connections. Session may be expired.')
-      setToken(null)
-      localStorage.removeItem('cira-admin-token')
+      const data = await api('/admin/connections')
+      setRows(data.connections || [])
+      setEnvTenants(data.from_environment || [])
+      setStorage(data.secret_storage || storage)
+    } catch (err: any) {
+      if (/401|403/.test(String(err?.message))) {
+        window.localStorage.removeItem('cira-token')
+        setToken(null)
+      }
+      setError(err?.message || 'Could not load the registry')
     }
-  }
+  }, [api, storage])
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  useEffect(() => {
+    if (token) {
+      api('/auth/me')
+        .then((me) => setWho(me.name || me.employee_id))
+        .catch(() => setWho(''))
+      load()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
+  const signIn = async (event: React.FormEvent) => {
+    event.preventDefault()
     setError('')
+    setBusy(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/login`, {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ employee_id: username, password }),
       })
-      if (!res.ok) throw new Error('Invalid admin credentials')
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.detail || 'Sign-in failed')
+      const roles: string[] = data?.user?.roles || []
+      if (!roles.includes('admin')) throw new Error('This account is not an administrator.')
+      window.localStorage.setItem('cira-token', data.token)
+      window.localStorage.setItem('cira-emp-id', data.user.employee_id)
       setToken(data.token)
-      localStorage.setItem('cira-admin-token', data.token)
-      loadConnections(data.token)
+      setWho(data.user.name || data.user.employee_id)
+      setPassword('')
     } catch (err: any) {
-      setError(err.message)
+      setError(err?.message || 'Sign-in failed')
+    } finally {
+      setBusy(false)
     }
   }
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const signOut = () => {
+    window.localStorage.removeItem('cira-token')
+    setToken(null)
+    setRows([])
+    setError('')
+  }
+
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    setTestResult(null)
     try {
-      const res = await fetch(`${API_BASE}/admin/connections`, {
+      await api('/admin/connections', { method: 'POST', body: JSON.stringify({ ...form, test_first: false }) })
+      setNotice(`${form.company_db.toUpperCase()} registered. Its credentials are stored, never displayed.`)
+      setForm({ ...EMPTY_FORM })
+      await load()
+    } catch (err: any) {
+      setError(err?.message || 'Could not save the connection')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const testNew = async () => {
+    setTesting('new')
+    setError('')
+    setTestResult(null)
+    try {
+      const result = await api('/admin/connections/test', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          company_db: form.company_db,
+          hana_address: form.hana_address,
+          hana_port: Number(form.hana_port),
+          hana_user: form.hana_user,
+          hana_password: form.hana_password,
+          service_layer_port: Number(form.service_layer_port),
+          sl_user: form.sl_user,
+          sl_password: form.sl_password,
+        }),
       })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.detail || 'Failed to add connection')
-      }
-      setShowAdd(false)
-      loadConnections(token!)
-      setFormData({
-        company_db: '',
-        hana_address: '',
-        hana_port: 30013,
-        hana_user: '',
-        hana_password: '',
-        service_layer_port: 50000
-      })
+      setTestResult(result)
     } catch (err: any) {
-      alert(err.message)
+      setError(err?.message || 'Test failed')
+    } finally {
+      setTesting(null)
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this connection?')) return
+  const testSaved = async (row: Connection) => {
+    setTesting(row.id)
+    setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/connections/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!res.ok) throw new Error('Failed to delete')
-      loadConnections(token!)
+      setTestResult(await api(`/admin/connections/${row.id}/test`, { method: 'POST' }))
     } catch (err: any) {
-      alert(err.message)
+      setError(err?.message || 'Test failed')
+    } finally {
+      setTesting(null)
     }
   }
+
+  const toggle = async (row: Connection) => {
+    try {
+      await api(`/admin/connections/${row.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ enabled: !row.enabled }),
+      })
+      await load()
+    } catch (err: any) {
+      setError(err?.message || 'Could not update')
+    }
+  }
+
+  const remove = async (row: Connection) => {
+    if (!window.confirm(`Remove ${row.company_db} from this server? Employees will no longer be able to sign in to it.`)) return
+    try {
+      await api(`/admin/connections/${row.id}`, { method: 'DELETE' })
+      await load()
+    } catch (err: any) {
+      setError(err?.message || 'Could not delete')
+    }
+  }
+
+  const field = (label: string, key: keyof typeof EMPTY_FORM, opts: { type?: string; hint?: string; required?: boolean } = {}) => (
+    <label className="block">
+      <span className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+        {label}
+        {opts.required ? ' *' : ''}
+      </span>
+      <input
+        className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        type={opts.type || 'text'}
+        value={(form as any)[key]}
+        required={!!opts.required}
+        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+      />
+      {opts.hint ? <span className="mt-0.5 block text-[11px] text-gray-400">{opts.hint}</span> : null}
+    </label>
+  )
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-white py-8 px-4 shadow-xl sm:rounded-2xl sm:px-10 border border-gray-100">
-            <div className="mb-6 flex justify-center">
-              <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-                <Lock size={24} />
-              </div>
-            </div>
-            <h2 className="mt-2 mb-6 text-center text-2xl font-bold text-gray-900">Admin Control Panel</h2>
-            {error && <div className="mb-4 text-sm text-rose-500 text-center bg-rose-50 p-2 rounded-lg">{error}</div>}
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Username</label>
-                <input required type="text" value={username} onChange={e => setUsername(e.target.value)} className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Password</label>
-                <input required type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer" />
-              </div>
-              <button type="submit" className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer">Sign in to Admin</button>
-            </form>
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <form onSubmit={signIn} className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-7 space-y-4">
+          <div className="flex items-center gap-2 text-indigo-600">
+            <ShieldAlert size={20} />
+            <h1 className="text-lg font-extrabold text-gray-900">CIRA administration</h1>
           </div>
-        </div>
-      </div>
+          <p className="text-xs text-gray-500 -mt-2">
+            Company DB registry. Sign in with the bootstrap admin account (CIRA_ADMIN_ID /
+            CIRA_ADMIN_PASSWORD) or your IdP identity carrying the admin role.
+          </p>
+          <input
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Employee ID / admin ID"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+          <input
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
+          <button
+            disabled={busy}
+            className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Sign in'}
+          </button>
+          <Link href="/" className="block text-center text-xs text-gray-400 hover:text-indigo-600">
+            Back to CIRA
+          </Link>
+        </form>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-100 text-indigo-600 flex items-center justify-center rounded-xl">
-              <Database size={20} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Tenant Connections</h1>
-              <p className="text-xs text-gray-500">Manage multi-tenant SAP HANA databases</p>
-            </div>
+    <main className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="flex items-center gap-2 text-xl font-extrabold text-gray-900">
+              <Building2 size={20} className="text-indigo-600" /> Company databases
+            </h1>
+            <p className="text-xs text-gray-500">
+              Signed in as {who || 'admin'} · credentials are write-only here ·{' '}
+              {storage.encrypted_available ? 'encryption at rest available' : 'install `cryptography` to encrypt at rest'}
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700 shadow-sm transition-colors cursor-pointer">
-              <Plus size={16} /> Add Connection
-            </button>
-            <button onClick={() => { setToken(null); localStorage.removeItem('cira-admin-token') }} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 bg-gray-100 px-3 py-2 rounded-xl text-sm font-semibold cursor-pointer">
-              <LogOut size={16} /> Logout
+          <div className="flex items-center gap-2">
+            <Link href="/" className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200">
+              Open CIRA
+            </Link>
+            <button onClick={signOut} className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100">
+              Sign out
             </button>
           </div>
-        </div>
+        </header>
 
-        {showAdd && (
-          <div className="mb-8 bg-white p-6 rounded-2xl shadow-lg border border-indigo-100">
-            <h3 className="text-lg font-bold mb-4 text-gray-900">New Database Connection</h3>
-            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Company DB Name (Unique Identifier)</label>
-                <input required type="text" value={formData.company_db} onChange={e => setFormData({...formData, company_db: e.target.value})} className="w-full rounded-lg border border-gray-300 p-2 text-sm cursor-pointer" placeholder="e.g. CIRA_DEMO_NEW" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">HANA Address (IP/Host)</label>
-                <input required type="text" value={formData.hana_address} onChange={e => setFormData({...formData, hana_address: e.target.value})} className="w-full rounded-lg border border-gray-300 p-2 text-sm cursor-pointer" placeholder="e.g. 20.204.5.237" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">HANA Port</label>
-                <input required type="number" value={formData.hana_port} onChange={e => setFormData({...formData, hana_port: parseInt(e.target.value)})} className="w-full rounded-lg border border-gray-300 p-2 text-sm cursor-pointer" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Service Layer Port</label>
-                <input required type="number" value={formData.service_layer_port} onChange={e => setFormData({...formData, service_layer_port: parseInt(e.target.value)})} className="w-full rounded-lg border border-gray-300 p-2 text-sm cursor-pointer" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Database Username</label>
-                <input required type="text" value={formData.hana_user} onChange={e => setFormData({...formData, hana_user: e.target.value})} className="w-full rounded-lg border border-gray-300 p-2 text-sm cursor-pointer" placeholder="e.g. SYSTEM" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Database Password</label>
-                <input required type="password" value={formData.hana_password} onChange={e => setFormData({...formData, hana_password: e.target.value})} className="w-full rounded-lg border border-gray-300 p-2 text-sm cursor-pointer" />
-              </div>
-              <div className="col-span-1 md:col-span-2 flex justify-end gap-3 mt-2">
-                <button type="button" onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer">Save Connection</button>
-              </div>
-            </form>
+        {error && (
+          <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+            <X size={15} className="mt-0.5" /> {error}
+          </div>
+        )}
+        {notice && (
+          <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+            <Check size={15} className="mt-0.5" /> {notice}
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Company DB</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">HANA Host</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ports (SQL/SL)</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {connections.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">#{c.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                      {c.company_db}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
-                    <Server size={14} className="inline mr-1 text-gray-400" />
-                    {c.hana_address}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {c.hana_port} / {c.service_layer_port}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <Key size={14} className="inline mr-1 text-gray-400" />
-                    {c.hana_user}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button onClick={() => handleDelete(c.id)} className="text-rose-600 hover:text-rose-900 bg-rose-50 p-2 rounded-lg transition-colors cursor-pointer">
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {connections.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500 text-sm">
-                    No tenant connections found. Add one to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-gray-900">Registered company DBs</h2>
+          {rows.length === 0 && (
+            <p className="mt-1 text-xs text-gray-500">
+              None yet. Employees can currently sign in to the environment-registered DBs:
+              {envTenants.length ? ` ${envTenants.join(', ')}.` : ' the deployment default.'}
+            </p>
+          )}
+          {rows.length > 0 && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="py-2 pr-3">Company DB</th>
+                    <th className="py-2 pr-3">HANA target</th>
+                    <th className="py-2 pr-3">User</th>
+                    <th className="py-2 pr-3">Secret</th>
+                    <th className="py-2 pr-3">Service Layer</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map((row) => (
+                    <tr key={row.id} className={row.enabled ? '' : 'opacity-50'}>
+                      <td className="py-2 pr-3 font-bold text-gray-900">{row.company_db}</td>
+                      <td className="py-2 pr-3 font-mono">{row.hana_address}:{row.hana_port}</td>
+                      <td className="py-2 pr-3">{row.hana_user}</td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                            row.hana_secret_source === 'env'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : row.hana_secret_source === 'encrypted'
+                                ? 'bg-indigo-100 text-indigo-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}
+                        >
+                          {row.hana_secret_source}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 font-mono">{row.sl_user ? `:${row.service_layer_port} as ${row.sl_user}` : '—'}</td>
+                      <td className="py-2 pr-3">{row.enabled ? 'enabled' : 'paused'}</td>
+                      <td className="py-2 whitespace-nowrap text-right">
+                        <button
+                          onClick={() => testSaved(row)}
+                          className="mr-1 inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 font-bold text-gray-600 hover:bg-gray-200"
+                        >
+                          {testing === row.id ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Test
+                        </button>
+                        <button
+                          onClick={() => toggle(row)}
+                          className="mr-1 inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 font-bold text-gray-600 hover:bg-gray-200"
+                        >
+                          {row.enabled ? 'Pause' : 'Enable'}
+                        </button>
+                        <button
+                          onClick={() => remove(row)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 font-bold text-rose-600 hover:bg-rose-100"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {testResult?.checks && (
+            <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                <Eye size={13} /> Last test
+              </p>
+              <ul className="space-y-0.5 text-xs">
+                {testResult.checks.map((check, i) => (
+                  <li key={i} className={check.ok ? 'text-emerald-700' : 'text-rose-600'}>
+                    {check.ok ? '✓' : '✗'} {check.target}: {check.detail}
+                  </li>
+                ))}
+                {typeof testResult.tables_visible === 'number' ? (
+                  <li className="text-gray-600">tables visible: {testResult.tables_visible}</li>
+                ) : null}
+              </ul>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-gray-900">Add a company DB</h2>
+          <p className="mt-1 text-[11px] text-gray-500">
+            Paste the password as-is: it is encrypted at rest with CIRA_SECRET_KEY. To keep nothing on
+            disk, type <code className="rounded bg-gray-100 px-1">env:VAR_NAME</code> instead and set that
+            variable in Backend/.env on the server.
+          </p>
+          <form onSubmit={create} className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            {field('Company DB / schema', 'company_db', { required: true, hint: 'e.g. ACME_PROD (identifier-shaped)' })}
+            {field('Display name', 'display_name')}
+            {field('HANA host', 'hana_address', { required: true, hint: 'hostname or IP reachable from this server' })}
+            {field('HANA SQL port', 'hana_port', { type: 'number', hint: '3<instance>13 system · 3<instance>15 tenant' })}
+            {field('HANA read-only user', 'hana_user', { required: true })}
+            {field('HANA password', 'hana_password', { type: 'password', required: true })}
+            {field('Service Layer port', 'service_layer_port', { type: 'number', hint: 'needed only for data entry / writes' })}
+            {field('Service Layer user', 'sl_user', { hint: 'a B1 user (e.g. manager) — not the HANA user' })}
+            {field('Service Layer password', 'sl_password', { type: 'password' })}
+            {field('Notes', 'notes')}
+            <div className="md:col-span-2 flex flex-wrap items-center gap-2">
+              <button
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+              >
+                {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Save connection
+              </button>
+              <button
+                type="button"
+                onClick={testNew}
+                disabled={busy || testing === 'new'}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200"
+              >
+                {testing === 'new' ? <Loader2 size={14} className="animate-spin" /> : <Plug size={14} />} Test before saving
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
-    </div>
+    </main>
   )
 }

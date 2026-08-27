@@ -42,15 +42,38 @@ def _utcnow() -> dt.datetime:
 
 
 class CompanyConnection(Base):
+    """A company DB (tenant) an employee may sign in to, entered in the admin panel.
+
+    Hardened versus the first cut of that feature:
+    * the SAP password is never stored raw — `hana_secret` holds `env:VAR_NAME` or
+      `enc:<fernet>` (see Backend/secrets.py), and no API response includes it;
+    * Service Layer credentials are separate fields (they are B1 users, not the
+      HANA schema user — reusing the HANA password for both leaked it to a second
+      endpoint and never worked anyway);
+    * `enabled` lets an operator park a company DB without deleting it;
+    * `source_priority` pins the backend order per tenant.
+    """
+
     __tablename__ = "company_connections"
 
     id = Column(Integer, primary_key=True, index=True)
     company_db = Column(String, unique=True, index=True, nullable=False)
-    hana_address = Column(String, nullable=False)
-    hana_port = Column(Integer, nullable=False)
+    display_name = Column(String)
+    enabled = Column(Integer, default=1, nullable=False)     # 0/1 (SQLite has no bool)
+    source_priority = Column(String, default="")               # "" -> global CIRA_DATA_SOURCE_ORDER
+    # SAP HANA
+    hana_host = Column(String, nullable=False)
+    hana_port = Column(Integer, nullable=False, default=30013)
     hana_user = Column(String, nullable=False)
-    hana_password = Column(String, nullable=False)
+    hana_secret = Column(String, nullable=False)              # env:VAR or enc:<token>
+    hana_encrypt = Column(Integer, default=1, nullable=False)
+    hana_extra_schemas = Column(String, default="")
+    # SAP B1 Service Layer (optional; required for writes)
     service_layer_port = Column(Integer, default=50000)
+    sl_user = Column(String, default="")
+    sl_secret = Column(String, default="")
+    sl_use_tls = Column(Integer, default=1, nullable=False)
+    notes = Column(String, default="")
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -96,12 +119,14 @@ async def _add_missing_columns() -> None:
     """Tiny in-process migration so older cira.db files keep working."""
     expected = {
         "company_connections": {
-            "company_db": "VARCHAR",
-            "hana_address": "VARCHAR",
-            "hana_port": "INTEGER",
-            "hana_user": "VARCHAR",
-            "hana_password": "VARCHAR",
-            "service_layer_port": "INTEGER",
+            "display_name": "VARCHAR",
+            "enabled": "INTEGER DEFAULT 1",
+            "source_priority": "VARCHAR",
+            "hana_extra_schemas": "VARCHAR",
+            "sl_user": "VARCHAR",
+            "sl_secret": "VARCHAR",
+            "sl_use_tls": "INTEGER DEFAULT 1",
+            "notes": "VARCHAR",
             "created_at": "DATETIME",
             "updated_at": "DATETIME",
         },
@@ -150,6 +175,7 @@ __all__ = [
     "Base",
     "ChatMessage",
     "ChatSession",
+    "CompanyConnection",
     "create_short_lived_session",
     "engine",
     "func",

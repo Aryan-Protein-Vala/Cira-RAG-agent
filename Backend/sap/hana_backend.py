@@ -30,6 +30,24 @@ from .types_ import ColumnInfo, SapUnavailableError, TableInfo
 log = logging.getLogger("cira.hana")
 
 
+_IDENT_OK = re.compile(r"^[A-Za-z_@#][A-Za-z0-9_$#@]*$")
+
+
+def sql_ident(name: str) -> str:
+    """Quote an identifier for HANA, refusing anything identifier-shaped-but-not.
+
+    Schema names can arrive from the admin panel (tenant registry) as well as the
+    environment, and `row_count`/schema qualification build SQL text — so the
+    value must be validated here rather than trusted upstream.
+    """
+    clean = (name or "").strip()
+    if not _IDENT_OK.match(clean):
+        raise SapUnavailableError(
+            f"Refusing to use {clean!r} as a schema/table identifier in SQL."
+        )
+    return '"' + clean.replace('"', "") + '"'
+
+
 def _safe_error(exc: Exception) -> str:
     """Strip host/port/user detail from driver exceptions before they travel."""
     text = str(exc) or exc.__class__.__name__
@@ -68,9 +86,19 @@ class HanaBackend(DataBackend):
             1, pool_size or int(config.resolve(tenant, "HANA_POOL_SIZE", config.HANA_POOL_SIZE))
         )
         if not self.host or not self.user or not self.password:
+            missing = [
+                name for name, value in (
+                    ("HANA_HOST", self.host), ("HANA_USER", self.user),
+                    ("HANA_PASSWORD", self.password), ("HANA_SCHEMA", self.schema),
+                ) if not value
+            ]
+            hint = (
+                " — the tenant's `env:VAR_NAME` reference did not resolve, so set that "
+                "variable for this process" if "HANA_PASSWORD" in missing else ""
+            )
             raise config.ConfigError(
-                "SAP HANA is not fully configured (HANA_HOST / HANA_USER / "
-                "HANA_PASSWORD / HANA_SCHEMA are required in Backend/.env)."
+                f"SAP HANA is not fully for this company DB: missing {', '.join(missing)}"
+                f" (set them in Backend/.env or the admin panel){hint}."
             )
         # The pool only bounds *idle* connections; the semaphore bounds the total
         # ever opened, so a burst of concurrent questions cannot exhaust HANA
@@ -433,7 +461,7 @@ class HanaBackend(DataBackend):
     def row_count(self, table: str) -> int | None:
         try:
             rows = self._fetch_dicts(
-                f'SELECT COUNT(*) AS "c" FROM "{self.schema}"."{table.upper()}"'
+                f"SELECT COUNT(*) AS \"c\" FROM {sql_ident(self.schema)}.{sql_ident(table.upper())}"
             )
             return int(rows[0]["c"]) if rows else None
         except Exception:

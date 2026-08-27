@@ -30,7 +30,7 @@ jobs:
           # hdbcli/pymssql are not needed for the suite (it runs on the sandbox)
           pip install fastapi "uvicorn[standard]" pydantic python-multipart \
             SQLAlchemy aiosqlite greenlet langchain-core langchain-openai langgraph \
-            httpx python-dotenv pytest pytest-asyncio ruff
+            httpx python-dotenv cryptography pytest pytest-asyncio ruff
       - name: Lint
         run: ruff check . --output-format=github
       - name: Config sanity (must not boot on an unsafe config)

@@ -31,3 +31,4 @@ pymssql>=2.2.0                   # Microsoft SQL Server (port 1433); only needed
 
 # ── Misc ─────────────────────────────────────────────────────────────────────
 python-dotenv>=1.0
+cryptography>=42.0               # encrypts admin-panel SAP credentials at rest (credential_store.py)

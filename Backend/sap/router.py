@@ -728,13 +728,16 @@ def _qualify_bare_tables(sql: str, backend: DataBackend) -> str:
     known = {t.name.upper() for t in backend.list_tables(limit=100000)}
     if not known:
         return sql
-    quote_open, quote_close = ("[", "]") if backend.dialect == "mssql" else ('"', '"')
+    from .hana_backend import sql_ident
+
+    def quote(ident: str) -> str:
+        return f"[{ident.replace(']', ']]')}]" if backend.dialect == "mssql" else sql_ident(ident)
 
     def repl(match: re.Match) -> str:
         keyword, spacing, name = match.group(1), match.group(2), match.group(3)
         bare = name.strip('"[]').upper()
         if bare in known and "." not in name:
-            return f'{keyword}{spacing}{quote_open}{backend.sql_schema}{quote_close}.{quote_open}{bare}{quote_close}'
+            return f"{keyword}{spacing}{quote(backend.sql_schema)}.{quote(bare)}"
         return match.group(0)
 
     return re.sub(

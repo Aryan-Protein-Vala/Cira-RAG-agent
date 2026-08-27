@@ -20,6 +20,15 @@ import config
 DB_PATH = Path(config.DATABASE_PATH)
 
 EXPECTED = {
+    "company_connections": {
+        "id": "INTEGER", "company_db": "VARCHAR", "display_name": "VARCHAR",
+        "enabled": "INTEGER", "source_priority": "VARCHAR", "hana_host": "VARCHAR",
+        "hana_port": "INTEGER", "hana_user": "VARCHAR", "hana_secret": "VARCHAR",
+        "hana_encrypt": "INTEGER", "hana_extra_schemas": "VARCHAR",
+        "service_layer_port": "INTEGER", "sl_user": "VARCHAR", "sl_secret": "VARCHAR",
+        "sl_use_tls": "INTEGER", "notes": "VARCHAR",
+        "created_at": "DATETIME", "updated_at": "DATETIME",
+    },
     "chat_sessions": {
         "id": "INTEGER",
         "session_id": "VARCHAR",
