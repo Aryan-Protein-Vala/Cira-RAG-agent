@@ -41,6 +41,20 @@ def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
+class CompanyConnection(Base):
+    __tablename__ = "company_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_db = Column(String, unique=True, index=True, nullable=False)
+    hana_address = Column(String, nullable=False)
+    hana_port = Column(Integer, nullable=False)
+    hana_user = Column(String, nullable=False)
+    hana_password = Column(String, nullable=False)
+    service_layer_port = Column(Integer, default=50000)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
@@ -81,6 +95,16 @@ async def init_db() -> None:
 async def _add_missing_columns() -> None:
     """Tiny in-process migration so older cira.db files keep working."""
     expected = {
+        "company_connections": {
+            "company_db": "VARCHAR",
+            "hana_address": "VARCHAR",
+            "hana_port": "INTEGER",
+            "hana_user": "VARCHAR",
+            "hana_password": "VARCHAR",
+            "service_layer_port": "INTEGER",
+            "created_at": "DATETIME",
+            "updated_at": "DATETIME",
+        },
         "chat_sessions": {
             "created_at": "DATETIME",
             "updated_at": "DATETIME",
