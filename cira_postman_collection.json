@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "cira-api-suite-v2",
     "name": "CIRA SAP AI - API Collection",
-    "description": "Complete API testing suite for CIRA SAP Business One RAG Agent",
+    "description": "Complete API testing suite for CIRA SAP Business One RAG Agent. Sign-in credentials are collection variables \u2014 set them locally, never commit them.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,6 +13,21 @@
     },
     {
       "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employeeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "companyDb",
       "value": "",
       "type": "string"
     }
@@ -28,8 +43,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/health",
-              "host": ["{{baseUrl}}"],
-              "path": ["health"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
             }
           }
         },
@@ -40,8 +59,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/sap/health",
-              "host": ["{{baseUrl}}"],
-              "path": ["sap", "health"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sap",
+                "health"
+              ]
             }
           }
         }
@@ -76,12 +100,17 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"employee_id\": \"ADMIN-001\",\n  \"password\": \"asdfghjkl;\",\n  \"company_db\": \"CIRA_DEMO_NEW\"\n}"
+              "raw": "{\n  \"employee_id\": \"{{employeeId}}\",\n  \"password\": \"{{password}}\",\n  \"company_db\": \"{{companyDb}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
             }
           }
         },
@@ -97,8 +126,13 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
             }
           }
         }
@@ -127,8 +161,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/chat",
-              "host": ["{{baseUrl}}"],
-              "path": ["chat"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat"
+              ]
             }
           }
         },
@@ -152,8 +190,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/generate_title",
-              "host": ["{{baseUrl}}"],
-              "path": ["generate_title"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "generate_title"
+              ]
             }
           }
         }
@@ -174,8 +216,13 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/sap/tables?limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["sap", "tables"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sap",
+                "tables"
+              ],
               "query": [
                 {
                   "key": "limit",

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { formatCompact, formatMoney, isMoneyColumn } from '@/lib/format'
 import {
   Area,
   AreaChart,
@@ -46,20 +47,17 @@ export interface ChartPayload {
 /* Vibrant Neon Palette — dynamically generated for up to 50 distinct items using golden angle */
 const COLORS = Array.from({ length: 50 }).map((_, i) => `hsl(${(i * 137.508) % 360}, 85%, 55%)`)
 
+/** Axis ticks: Indian units (K / L / Cr) and ₹ when the measure is an amount. */
+function makeCompact(money: boolean) {
+  return (value: number) => formatCompact(value, money)
+}
+
 const CHART_TYPES: Array<{ id: ChartType; label: string; icon: React.ReactNode }> = [
   { id: 'bar', label: 'Bar', icon: <BarChart3 size={13} /> },
   { id: 'line', label: 'Line', icon: <LineIcon size={13} /> },
   { id: 'area', label: 'Area', icon: <AreaIcon size={13} /> },
   { id: 'pie', label: 'Pie', icon: <PieIcon size={13} /> },
 ]
-
-function compact(value: number): string {
-  const abs = Math.abs(value)
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-  return String(Math.round(value * 100) / 100)
-}
 
 function humanise(key: string): string {
   return key
@@ -110,13 +108,17 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           {humanise(yKey)}:{' '}
           <span className="text-indigo-500 font-bold">
             {typeof value === 'number' && !Number.isNaN(value)
-              ? value.toLocaleString()
+              ? isMoneyColumn(yKey)
+                ? formatMoney(value)
+                : value.toLocaleString('en-IN')
               : String(value ?? '')}
           </span>
         </p>
       </div>
     )
   }
+
+  const compactTicks = makeCompact(isMoneyColumn(yKey))
 
   const axisProps = {
     stroke: 'currentColor',
@@ -136,7 +138,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           <BarChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border/40" vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
-            <YAxis {...axisProps} tickFormatter={compact} width={65} />
+            <YAxis {...axisProps} tickFormatter={compactTicks} width={72} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
             <Bar dataKey={yKey} fill="#818cf8" radius={[6, 6, 0, 0]} maxBarSize={expanded ? 80 : 52} />
           </BarChart>
@@ -144,7 +146,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
           <LineChart data={data} margin={{ top: 10, right: 12, left: 4, bottom: expanded ? 40 : 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border/40" vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
-            <YAxis {...axisProps} tickFormatter={compact} width={65} />
+            <YAxis {...axisProps} tickFormatter={compactTicks} width={72} />
             <Tooltip content={<CustomTooltip />} />
             <Line
               type="monotone"
@@ -165,7 +167,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border/40" vertical={false} />
             <XAxis dataKey={xKey} {...axisProps} dy={8} {...xAxisProps} />
-            <YAxis {...axisProps} tickFormatter={compact} width={65} />
+            <YAxis {...axisProps} tickFormatter={compactTicks} width={72} />
             <Tooltip content={<CustomTooltip />} />
             <Area type="monotone" dataKey={yKey} stroke="#818cf8" strokeWidth={2.5} fill="url(#areaChartGrad)" />
           </AreaChart>

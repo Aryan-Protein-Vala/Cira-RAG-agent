@@ -1,9 +1,33 @@
+# ── OS / tooling binaries (do not vendor executables into the repo) ─────────
+*.exe
 *.zip
-node_modules/
-.next/
-venv/
+*.tgz
+
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+
+# ── Secrets and local state ──────────────────────────────────────────────────
 .env
+tunnel.env
 .env.local
+*.db
+*.db-wal
+*.db-shm
+Backend/data/
 temp_cira_deploy/
+
+# ── Scratch / design drop-ins ────────────────────────────────────────────────
+WhatsApp Image*
+
+# Dead duplicate of Frontend/ kept locally for reference only (untracked).
+Frontend_legacy/

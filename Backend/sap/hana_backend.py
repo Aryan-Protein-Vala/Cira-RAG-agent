@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import logging
 import queue
+import re
 import threading
 import time
 from typing import Any
 
 import config
+
 from .base import DataBackend
 from .serialize import to_jsonable
 from .types_ import ColumnInfo, SapUnavailableError, TableInfo
@@ -28,10 +30,21 @@ from .types_ import ColumnInfo, SapUnavailableError, TableInfo
 log = logging.getLogger("cira.hana")
 
 
+def _safe_error(exc: Exception) -> str:
+    """Strip host/port/user detail from driver exceptions before they travel."""
+    text = str(exc) or exc.__class__.__name__
+    for token in (str(config.HANA_HOST), str(config.HANA_USER), str(config.HANA_PASSWORD)):
+        if token:
+            text = text.replace(token, "[redacted]")
+    text = re.sub(r"(\d{1,3}\.){3}\d{1,3}:?\d*", "[host redacted]", text)
+    return text[:300]
+
+
 class HanaBackend(DataBackend):
     name = "SAP HANA"
     dialect = "hana"
     simulated = False
+    capabilities = frozenset({"sql", "catalog", "write-via-service-layer"})
 
     def __init__(
         self,
@@ -42,20 +55,43 @@ class HanaBackend(DataBackend):
         schema: str | None = None,
         pool_size: int | None = None,
     ):
-        tenant = config.CURRENT_TENANT.get() or {}
-        self.host = host or tenant.get("HANA_HOST", config.HANA_HOST)
-        self.port = port or tenant.get("HANA_PORT", config.HANA_PORT)
-        self.user = user or tenant.get("HANA_USER", config.HANA_USER)
-        self.password = password or tenant.get("HANA_PASSWORD", config.HANA_PASSWORD)
-        self.schema = (schema or tenant.get("HANA_SCHEMA", config.HANA_SCHEMA) or "").strip()
-        self.pool_size = max(1, pool_size or tenant.get("HANA_POOL_SIZE", config.HANA_POOL_SIZE))
-        self._pool: queue.LifoQueue = queue.LifoQueue()
+        tenant = config.CURRENT_TENANT.get() or None
+
+        self.host = host or str(config.resolve(tenant, "HANA_HOST", config.HANA_HOST))
+        self.port = port or int(config.resolve(tenant, "HANA_PORT", config.HANA_PORT))
+        self.user = user or str(config.resolve(tenant, "HANA_USER", config.HANA_USER))
+        self.password = password or str(config.resolve(tenant, "HANA_PASSWORD", config.HANA_PASSWORD))
+        self.schema = (
+            schema or str(config.resolve(tenant, "HANA_SCHEMA", config.HANA_SCHEMA)) or ""
+        ).strip()
+        self.pool_size = max(
+            1, pool_size or int(config.resolve(tenant, "HANA_POOL_SIZE", config.HANA_POOL_SIZE))
+        )
+        if not self.host or not self.user or not self.password:
+            raise config.ConfigError(
+                "SAP HANA is not fully configured (HANA_HOST / HANA_USER / "
+                "HANA_PASSWORD / HANA_SCHEMA are required in Backend/.env)."
+            )
+        # The pool only bounds *idle* connections; the semaphore bounds the total
+        # ever opened, so a burst of concurrent questions cannot exhaust HANA
+        # (each overflow connection used to be created unconditionally).
+        self._max_total = self.pool_size * 4
+        self._slots = threading.BoundedSemaphore(self._max_total)
+        self._acquire_wait_s = max(1.0, config.HANA_CONNECT_TIMEOUT_MS / 1000 * 2)
+        self._pool: queue.LifoQueue = queue.LifoQueue(maxsize=self.pool_size)
         self._created = 0
         self._lock = threading.Lock()
+        self._ping_cache: tuple[float, dict] | None = None
         self._catalog_lock = threading.Lock()
         self._tables_cache: tuple[float, list[TableInfo]] | None = None
         self._columns_cache: dict[str, tuple[float, list[ColumnInfo]]] = {}
         self._schema_verified = False
+
+    @property
+    def allowed_schemas(self) -> list[str]:
+        """Company schema + whatever the operator explicitly opted in to."""
+        extra = [s.strip().upper() for s in (config.HANA_EXTRA_SCHEMAS or []) if s.strip()]
+        return [s for s in [self.schema, *extra] if s]
 
     # ── connections ──────────────────────────────────────────────────────────
     def _connect(self):
@@ -63,7 +99,11 @@ class HanaBackend(DataBackend):
             from hdbcli import dbapi
         except ImportError as exc:  # pragma: no cover
             raise SapUnavailableError(
-                "hdbcli is not installed — run `pip install hdbcli`."
+                "the SAP HANA driver (hdbcli) is not installed in this venv. It is not "
+                "on PyPI: install the SAP HANA Client "
+                "(https://help.sap.com/viewer/p/SAP_HANA_CLIENT) or "
+                "`pip install <hdbcli-*.whl>` from it. On SQL Server B1, use "
+                "CIRA_DATA_SOURCE=mssql instead of HANA."
             ) from exc
 
         kwargs: dict[str, Any] = {
@@ -80,8 +120,9 @@ class HanaBackend(DataBackend):
             kwargs["sslValidateCertificate"] = config.HANA_VALIDATE_CERT
         if self.schema:
             kwargs["currentSchema"] = self.schema
-        if getattr(config, "HANA_DATABASE_NAME", ""):
-            kwargs["databaseName"] = config.HANA_DATABASE_NAME
+        database_name = getattr(config, "HANA_DATABASE_NAME", "")
+        if database_name:
+            kwargs["databaseName"] = database_name
         try:
             return dbapi.connect(**kwargs)
         except Exception as exc:
@@ -93,19 +134,25 @@ class HanaBackend(DataBackend):
 
     def _acquire(self):
         try:
-            conn = self._pool.get_nowait()
-            try:
-                if conn.isconnected():
-                    return conn
-            except Exception:
-                pass
-            try:
-                conn.close()
-            except Exception:
-                pass
+            while True:
+                conn = self._pool.get_nowait()
+                try:
+                    if conn.isconnected():
+                        return conn
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                finally:
+                    self._slots.release()
         except queue.Empty:
             pass
 
+        if not self._slots.acquire(timeout=self._acquire_wait_s):
+            raise SapUnavailableError(
+                f"HANA connection pool is saturated ({self._max_total} connections in use); "
+                "raise HANA_POOL_SIZE or retry shortly."
+            )
         with self._lock:
             self._created += 1
         try:
@@ -113,21 +160,28 @@ class HanaBackend(DataBackend):
         except Exception as exc:
             with self._lock:
                 self._created -= 1
+            self._slots.release()
             raise SapUnavailableError(f"HANA connection failed: {exc}") from exc
 
     def _release(self, conn) -> None:
         if conn is None:
             return
+        healthy = False
         try:
-            if self._pool.qsize() < self.pool_size and conn.isconnected():
+            healthy = bool(conn.isconnected())
+        except Exception:
+            healthy = False
+        if healthy:
+            try:
                 self._pool.put_nowait(conn)
                 return
-        except Exception:
-            pass
+            except queue.Full:
+                pass
         try:
             conn.close()
         except Exception:
             pass
+        self._slots.release()
 
     def close(self) -> None:
         while True:
@@ -139,14 +193,21 @@ class HanaBackend(DataBackend):
                 conn.close()
             except Exception:
                 pass
+            finally:
+                self._slots.release()
 
     def create_entity(self, table_or_entity: str, data: dict) -> dict:
-        """Create a new entity in SAP by delegating to the OData Service Layer."""
-        # Writes must go through the Service Layer for business logic validation,
-        # even when our primary read path is direct HANA SQL.
-        from .service_layer import ServiceLayerBackend
-        sl = ServiceLayerBackend()
-        return sl.create_entity(table_or_entity, data)
+        """Create a new entity in SAP by delegating to the OData Service Layer.
+
+        Writes must go through the Service Layer so B1 business logic (numbering
+        ranges, defaults, field validation, activation) runs; even when the read
+        path is direct HANA SQL we never INSERT from here.  The backend is the
+        shared per-tenant instance (a fresh one per write used to leak a Service
+        Layer session each time).
+        """
+        from .service_layer import get_service_layer
+
+        return get_service_layer().create_entity(table_or_entity, data)
 
     # ── raw execution ────────────────────────────────────────────────────────
     def execute(self, sql: str, params: list[Any] | None = None) -> tuple[list[str], list[tuple]]:
@@ -178,8 +239,11 @@ class HanaBackend(DataBackend):
         return out
 
     # ── health / schema discovery ────────────────────────────────────────────
-    def ping(self) -> dict:
-        started = time.time()
+    def ping(self, force: bool = False) -> dict:
+        now = time.time()
+        if not force and self._ping_cache and now - self._ping_cache[0] < config.HEALTH_CACHE_TTL_S:
+            return dict(self._ping_cache[1], cached=True)
+        started = now
         try:
             info = self._fetch_dicts(
                 "SELECT CURRENT_USER AS \"user\", CURRENT_SCHEMA AS \"schema\", "
@@ -187,24 +251,25 @@ class HanaBackend(DataBackend):
             )
             detail = info[0] if info else {}
             self._verify_schema()
-            return {
+            result = {
                 "ok": True,
                 "backend": self.name,
-                "host": f"{self.host}:{self.port}",
                 "schema": self.schema,
-                "user": detail.get("user"),
-                "version": detail.get("version"),
+                "server_version": detail.get("version"),
                 "latency_ms": int((time.time() - started) * 1000),
             }
         except Exception as exc:
-            return {
+            result = {
                 "ok": False,
                 "backend": self.name,
-                "host": f"{self.host}:{self.port}",
                 "schema": self.schema,
-                "error": str(exc),
+                # Never echo driver errors verbatim to the caller: they contain
+                # host, port and sometimes the username.
+                "error": _safe_error(exc),
                 "latency_ms": int((time.time() - started) * 1000),
             }
+        self._ping_cache = (time.time(), result)
+        return dict(result)
 
     def list_schemas(self) -> list[str]:
         try:
@@ -345,6 +410,25 @@ class HanaBackend(DataBackend):
         ]
         self._columns_cache[key] = (now, cols)
         return cols
+
+    def search_columns(self, keyword: str, limit: int = 40) -> list[dict]:
+        """Column-name/comment search across the whole company schema.
+
+        Lives here (rather than reaching into backend._fetch_dicts from the
+        router) so the statement, its TOP clause and its bind parameters stay
+        next to the catalog they describe.
+        """
+        self._verify_schema()
+        cap = max(1, min(int(limit or 40), 500))
+        needle = f"%{(keyword or '').upper()}%"
+        return self._fetch_dicts(
+            f"SELECT TOP {cap} TABLE_NAME AS \"table\", "
+            'COLUMN_NAME AS "column", DATA_TYPE_NAME AS "type", COMMENTS AS "description" '
+            "FROM SYS.TABLE_COLUMNS "
+            "WHERE SCHEMA_NAME = ? AND (UPPER(COLUMN_NAME) LIKE ? OR UPPER(COMMENTS) LIKE ?) "
+            "ORDER BY TABLE_NAME, POSITION",
+            [self.schema, needle, needle],
+        )
 
     def row_count(self, table: str) -> int | None:
         try:

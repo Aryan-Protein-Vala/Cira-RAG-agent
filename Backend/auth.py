@@ -1,18 +1,23 @@
-"""Session authentication.
+"""Session authentication and per-request tenant binding.
 
 The project notes claimed "HMAC-SHA256 JWT-style session tokens", but the code
-actually accepted *any* base64 blob the browser produced: anyone could mint a
-token for any employee id (including ADMIN-001) with two lines of JavaScript,
-and every /history, /sessions and /chat call trusted it.
-
+used to accept *any* base64 blob the browser produced: anyone could mint a
+token for any employee id (including ADMIN-001) with two lines of JavaScript.
 This module implements what was advertised:
+
   * tokens are minted server-side by POST /auth/login
   * payload.signature, HMAC-SHA256 over the payload with a server secret
   * constant-time verification, issued-at + expiry enforcement
-  * unsigned/legacy tokens are rejected with 401 so the UI can re-authenticate
+  * the company DB is fixed at sign-in and validated against the tenant
+    registry, so a token can never be used to reach an unregistered schema
+  * unsigned/tampered/expired tokens are rejected with 401
 
-Swap `authenticate()` for your IdP / SAP OUSR lookup when SSO is wired up; the
-rest of the app only depends on `validate_and_extract()`.
+Nothing here is a user *directory*: `authenticate()` accepts the bootstrap
+admin only, and only when CIRA_ADMIN_ID/CIRA_ADMIN_PASSWORD are configured.
+There is deliberately no permissive default (the previous build shipped
+a working demo pair in git *and* "any employee id + any password" = true).
+Wire this to your IdP or an SAP `OUSR` lookup for real deployments; the rest of
+the app only depends on `validate_and_extract()`.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ import secrets
 import time
 from pathlib import Path
 
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import config
@@ -81,7 +86,7 @@ def create_token(employee_id: str, name: str = "", roles: list[str] | None = Non
         "employee_id": employee_id,
         "name": name or employee_id,
         "roles": roles or ["employee"],
-        "company_db": company_db or config.SAP_B1_COMPANY_DB,
+        "company_db": company_db or config.DEFAULT_COMPANY_DB,
         "iat": now,
         "exp": exp,
     }
@@ -123,44 +128,93 @@ def verify_token(token: str) -> dict:
     return payload
 
 
+def bind_tenant(company_db: str, *, required: bool = True) -> dict | None:
+    """Resolve + activate the tenant for the current context.
+
+    Unknown company DBs are refused (when `required`) rather than silently
+    running on whichever global config happens to be set — that was how a token
+    could ask for "CLIENT_B_PROD" and actually receive the default schema's
+    data while the UI printed the other name.
+    """
+    tenant = config.tenant_for(company_db)
+    if tenant is None:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Company DB {company_db!r} is not configured for this deployment. "
+                    "Ask an administrator to register it (CIRA_TENANTS)."
+                ),
+            )
+        return None
+    config.CURRENT_TENANT.set(tenant)
+    return tenant
+
+
 def validate_and_extract(credentials: HTTPAuthorizationCredentials) -> dict:
-    """FastAPI dependency helper — returns the verified user context and sets tenant."""
+    """FastAPI dependency helper — verifies the token and binds its tenant."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token.")
-    
+
     payload = verify_token(credentials.credentials)
-    
-    company_db = payload.get("company_db", config.SAP_B1_COMPANY_DB)
-    tenant_config = config.MOCK_TENANTS.get(company_db)
-    if tenant_config:
-        config.CURRENT_TENANT.set(tenant_config)
-        
+    bind_tenant(payload.get("company_db") or config.DEFAULT_COMPANY_DB)
     return payload
 
 
+def require_roles(*roles: str):
+    """Dependency factory for endpoints that must not be open to every session."""
+
+    allowed = {r.strip().lower() for r in roles if r and r.strip()}
+
+    def dependency(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+        payload = validate_and_extract(credentials)
+        user_roles = {str(r).lower() for r in (payload.get("roles") or [])}
+        if allowed and not (user_roles & allowed):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This action requires one of the roles: {', '.join(sorted(allowed))}.",
+            )
+        return payload
+
+    return dependency
+
+
 def authenticate(employee_id: str, password: str, company_db: str = "") -> dict | None:
-    """Validate sign-in credentials."""
+    """Validate sign-in credentials.
+
+    Two identities exist today: the bootstrap admin (only when explicitly
+    configured) and, if the operator opted in, "any employee id" demo mode.
+    A real deployment replaces this with an IdP or an `OUSR` check.
+    """
     employee_id = (employee_id or "").strip()
     if not employee_id or not password:
         return None
 
-    if employee_id.lower() == config.ADMIN_ID.lower():
-        if hmac.compare_digest(password, config.ADMIN_PASSWORD):
-            return {"employee_id": "ADMIN-001", "name": "System Admin",
-                    "roles": ["admin", "employee"], "company_db": company_db or config.SAP_B1_COMPANY_DB}
+    if config.ADMIN_ID and employee_id.lower() == config.ADMIN_ID.lower():
+        if config.ADMIN_PASSWORD and hmac.compare_digest(password, config.ADMIN_PASSWORD):
+            return {
+                "employee_id": "ADMIN-001",
+                "name": "System Admin",
+                "roles": ["admin", "employee"],
+                "company_db": company_db or config.DEFAULT_COMPANY_DB,
+            }
         return None
 
     if config.ALLOW_ANY_EMPLOYEE:
-        return {"employee_id": employee_id, "name": employee_id, "roles": ["employee"], "company_db": company_db or config.SAP_B1_COMPANY_DB}
+        return {
+            "employee_id": employee_id,
+            "name": employee_id,
+            "roles": ["employee"],
+            "company_db": company_db or config.DEFAULT_COMPANY_DB,
+        }
     return None
 
 
-async def exchange_for_sap_token(user_token: str, employee_id: str) -> str:
-    """OAuth2 on-behalf-of exchange placeholder.
+def exchange_for_sap_token(user_token: str, employee_id: str) -> str:
+    """OAuth2 on-behalf-of exchange — placeholder, documented honestly.
 
-    CIRA currently reaches SAP with a read-only technical user (see
-    Backend/.env.example). When your IdP is configured, exchange the user's
-    token here for a user-scoped SAP token and pass it down to the SAP client
-    so row-level authorisations apply per employee.
+    CIRA reaches SAP with one read-only technical user (Backend/.env), so every
+    session shares the same ERP identity and SAP-side row-level authorisation is
+    *not* per employee. Until an IdP is wired up, do not claim otherwise.
     """
     return f"cira-service-account:{employee_id}"

@@ -16,6 +16,7 @@ Fixes vs. the previous version:
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -23,6 +24,7 @@ from typing import Any
 import httpx
 
 import config
+
 from .base import DataBackend
 from .types_ import ColumnInfo, SapDataError, SapUnavailableError, TableInfo
 
@@ -100,6 +102,22 @@ FIELD_MAP = {
     },
 }
 
+# OData identifiers must be plain property names. Everything else is either a
+# hallucination or an injection attempt — the value is escaped below, the field
+# name cannot be, so it is validated instead.
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def safe_odata_name(name: str, *, kind: str = "field") -> str:
+    clean = (name or "").strip()
+    if not _IDENT.match(clean):
+        raise SapDataError(
+            f"Unknown {kind} {clean!r} for this Service Layer entity. "
+            "Use a property name returned by sap_describe_table."
+        )
+    return clean
+
+
 STATUS_ENUMS = {
     "O": "bost_Open", "C": "bost_Close", "Open": "bost_Open", "Closed": "bost_Close",
 }
@@ -107,23 +125,37 @@ YESNO_ENUMS = {"Y": "tYES", "N": "tNO"}
 
 
 def map_field(table: str, column: str) -> str:
-    return FIELD_MAP.get(table.upper(), {}).get(column) or FIELD_MAP["*"].get(column) or column
+    column = safe_odata_name(column, kind="column")
+    mapped = FIELD_MAP.get(table.upper(), {}).get(column) or FIELD_MAP["*"].get(column) or column
+    return safe_odata_name(mapped, kind="property")
 
 
 class ServiceLayerBackend(DataBackend):
     name = "SAP B1 Service Layer"
     dialect = "odata"
     simulated = False
+    capabilities = frozenset({"entity", "write"})
+    # OData has no SQL and no schema-qualified identifiers.
+    sql_schema = ""
 
     def __init__(self):
-        tenant = config.CURRENT_TENANT.get() or {}
-        self.base = tenant.get("SERVICE_LAYER_BASE", config.SERVICE_LAYER_BASE)
-        self.company = tenant.get("SAP_B1_COMPANY_DB", config.SAP_B1_COMPANY_DB)
-        self.user = tenant.get("SAP_B1_USER", config.SAP_B1_USER)
-        self.password = tenant.get("SAP_B1_PASSWORD", config.SAP_B1_PASSWORD)
+        tenant = config.CURRENT_TENANT.get() or None
+        self.base = str(config.resolve(tenant, "SERVICE_LAYER_BASE", config.SERVICE_LAYER_BASE))
+        self.company = str(
+            config.resolve(tenant, "SAP_B1_COMPANY_DB", config.SAP_B1_COMPANY_DB)
+            or config.resolve(tenant, "COMPANY_DB", "")
+        )
+        self.user = str(config.resolve(tenant, "SAP_B1_USER", config.SAP_B1_USER))
+        self.password = str(config.resolve(tenant, "SAP_B1_PASSWORD", config.SAP_B1_PASSWORD))
         self.schema = self.company
+        if not self.base or not self.company or not self.user or not self.password:
+            raise config.ConfigError(
+                "SAP B1 Service Layer is not fully configured (SAP_B1_HOST, "
+                "SAP_B1_USER, SAP_B1_PASSWORD and SAP_B1_COMPANY_DB are required)."
+            )
         self._cookies: dict[str, str] | None = None
         self._expires_at: float = 0.0
+        self._ping_cache: tuple[float, dict] | None = None
         self._lock = threading.Lock()
         self._entity_sets: list[str] | None = None
 
@@ -166,7 +198,10 @@ class ServiceLayerBackend(DataBackend):
         url = path if path.startswith("http") else f"{self.base}/{path.lstrip('/')}"
         for attempt in range(2):
             with self._client(cookies) as client:
-                resp = client.get(url, params=params if attempt == 0 else None)
+                # The retry MUST repeat the same $filter/$select/$top. Dropping
+                # params after a session expiry returned the whole (unfiltered)
+                # entity set and presented it as the filtered answer.
+                resp = client.get(url, params=params)
             if resp.status_code == 401 and attempt == 0:
                 cookies = self._login(force=True)
                 continue
@@ -195,25 +230,31 @@ class ServiceLayerBackend(DataBackend):
         raise SapUnavailableError("Service Layer authentication kept failing.")
 
     # ── interface ────────────────────────────────────────────────────────────
-    def ping(self) -> dict:
-        started = time.time()
+    def ping(self, force: bool = False) -> dict:
+        now = time.time()
+        if not force and self._ping_cache and now - self._ping_cache[0] < config.HEALTH_CACHE_TTL_S:
+            return dict(self._ping_cache[1], cached=True)
+        started = now
         try:
+            # force=True here is deliberate: selection must prove it can really
+            # log in. Health polling afterwards uses the cached result instead of
+            # minting a fresh B1 session per request (it used to be per hit).
             self._login(force=True)
-            return {
+            result = {
                 "ok": True,
                 "backend": self.name,
-                "base_url": self.base,
                 "company_db": self.company,
                 "latency_ms": int((time.time() - started) * 1000),
             }
         except Exception as exc:
-            return {
+            result = {
                 "ok": False,
                 "backend": self.name,
-                "base_url": self.base,
-                "error": str(exc),
+                "error": _safe_error(exc, self.base),
                 "latency_ms": int((time.time() - started) * 1000),
             }
+        self._ping_cache = (time.time(), result)
+        return dict(result)
 
     def entity_sets(self) -> list[str]:
         if self._entity_sets is None:
@@ -321,12 +362,84 @@ class ServiceLayerBackend(DataBackend):
         return columns, rows
 
     def create_entity(self, table_or_entity: str, data: dict) -> dict:
-        """Create a new entity in the SAP Service Layer."""
-        entity = TABLE_TO_ENTITY.get(table_or_entity.upper(), table_or_entity)
-        return self._post(entity, data)
+        """Create a new record through the Service Layer.
+
+        The caller (main.py) has already checked the role, the enabled flag and
+        the entity allowlist; this validates the payload shape itself: bounded
+        keys/values, OData-safe property names, nothing that could smuggle a
+        nested path into the POST URL.
+        """
+        entity = safe_odata_name(
+            TABLE_TO_ENTITY.get((table_or_entity or "").upper(), table_or_entity),
+            kind="entity set",
+        )
+        if not isinstance(data, dict) or len(data) > config.SAP_WRITE_MAX_FIELDS:
+            raise SapDataError(
+                f"A write payload must be a flat object of at most "
+                f"{config.SAP_WRITE_MAX_FIELDS} fields."
+            )
+        clean: dict[str, Any] = {}
+        for key, value in data.items():
+            field = safe_odata_name(key, kind="property")
+            if isinstance(value, (int, float, str, bool)) or value is None:
+                clean[field] = value
+            elif isinstance(value, list) and all(
+                isinstance(v, (int, float, str, bool)) or v is None for v in value
+            ):
+                # Collection navigation properties (e.g. Orders/Addresses) are
+                # not supported by this single-shot POST; say so instead of
+                # letting SAP return a confusing 400.
+                raise SapDataError(
+                    f"Field {field!r} is a collection; create child records "
+                    "through their own entity set (e.g. OrderLines)."
+                )
+            else:
+                raise SapDataError(f"Field {field!r} has an unsupported value type.")
+        return self._post(entity, clean)
+
+
+_SL_BACKENDS: dict[str, ServiceLayerBackend] = {}
+_SL_LOCK = threading.Lock()
+
+
+def get_service_layer() -> ServiceLayerBackend:
+    """One Service Layer client per tenant, reused across requests.
+
+    Creates a fresh one only when the tenant has none yet; HanaBackend.create_entity
+    used to construct (and abandon) a new client for every single write.
+    """
+    tenant = config.CURRENT_TENANT.get()
+    key = config.tenant_id_of(tenant)
+    with _SL_LOCK:
+        backend = _SL_BACKENDS.get(key)
+        if backend is None:
+            backend = ServiceLayerBackend()
+            _SL_BACKENDS[key] = backend
+        return backend
+
+
+def reset_service_layer_cache() -> None:
+    """Test/reconfigure hook."""
+    with _SL_LOCK:
+        for backend in _SL_BACKENDS.values():
+            try:
+                backend._cookies = None
+                backend._expires_at = 0.0
+            except Exception:
+                pass
+        _SL_BACKENDS.clear()
+
+
+def _safe_error(exc: Exception, *secrets: str) -> str:
+    text = str(exc) or exc.__class__.__name__
+    for token in (*secrets, str(config.SAP_B1_USER), str(config.SAP_B1_PASSWORD)):
+        if token:
+            text = text.replace(token, "[redacted]")
+    return text[:300]
 
 
 def _odata_clause(field: str, op: str, value: Any) -> str:
+    field = safe_odata_name(field, kind="filter field")
     op = (op or "eq").lower()
     if field.lower() in ("documentstatus", "docstatus") and isinstance(value, str):
         value = STATUS_ENUMS.get(value, STATUS_ENUMS.get(value.title(), value))

@@ -59,8 +59,19 @@ type Message = {
   sources?: string[]
   status?: string
   error?: string
+  /** Every table produced by one answer; `data`/`chart` are just the first one. */
+  tables?: ResultTable[]
   _streamingId?: number
 }
+
+type ResultTable = {
+  data?: any[]
+  meta?: MessageMeta
+  entity?: string
+  chart?: ChartPayload
+}
+
+type BackendInfo = { name: string; schema: string; simulated: boolean }
 
 type Session = { id: string; title: string; date: string }
 type ToastType = { id: number; message: string; type: 'success' | 'error' }
@@ -73,6 +84,23 @@ function newSessionId(): string {
     return Array.from(bytes, (b: number) => b.toString(16).padStart(2, '0')).join('')
   }
   return `sid-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+/** "Today / Yesterday / 12 Mar" — the sidebar used to print 'Today' for all. */
+function formatSessionDate(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const dayDiff = Math.floor(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
+      86_400_000,
+  )
+  if (dayDiff <= 0) return 'Today'
+  if (dayDiff === 1) return 'Yesterday'
+  if (dayDiff < 7) return `${dayDiff}d ago`
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -107,8 +135,9 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
       const data = await res.json()
       onLogin(data.user, data.token)
     } catch {
-      // Fallback demo login for offline/preview environments
-      onLogin({ employee_id: id, name: `User ${id}` }, 'demo-token-' + Date.now())
+      // Never mint a local session: a failing/unreachable API must read as
+      // "cannot sign in", not as a signed-in user whose every call 401s.
+      setError('Cannot reach the CIRA API. Start the backend (or the SSH tunnel) and try again.')
     } finally {
       setBusy(false)
     }
@@ -359,6 +388,9 @@ export default function Page() {
   const [showProfile, setShowProfile] = useState(false)
   const [attachment, setAttachment] = useState<{ name: string; text: string } | null>(null)
   const [globalSearch, setGlobalSearch] = useState('')
+  // Which SAP source is answering (live HANA / Service Layer / sandbox). Driven
+  // by the `backend` SSE event the agent already emits.
+  const [activeBackend, setActiveBackend] = useState<BackendInfo | null>(null)
 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -447,13 +479,10 @@ export default function Page() {
       setEmployeeId(savedEmpId)
       setSessionToken(savedToken)
       setLoggedIn(true)
-    } else {
-      // Default to logged in for immediate awesome experience
-      setLoggedIn(true)
-      setEmployeeId('EMP-20481')
-      setProfileName('User')
-      setSessionToken('demo-token')
     }
+    // No saved session => show the login screen. The old "default to logged in
+    // with a demo-token" made every cold load flash the app, 401 on /sessions,
+    // and bounce out with "Session expired — please sign in again".
     setProfileName(localStorage.getItem('cira-profile-name') || 'User')
     setIsAuthLoaded(true)
   }, [])
@@ -473,15 +502,21 @@ export default function Page() {
           const res = await api('/sessions')
           const data = await res.json()
           if (data.sessions) {
-            setSessions(data.sessions.map((s: any) => ({ id: s.id, title: s.title, date: 'Today' })))
+            setSessions(
+              data.sessions.map((x: any) => ({
+                id: x.id,
+                title: x.title,
+                // was hard-coded 'Today' for every conversation
+                date: formatSessionDate(x.updated_at),
+              })),
+            )
+          } else {
+            setSessions([])
           }
         } catch {
-          // demo fallback sessions
-          setSessions([
-            { id: 's1', title: 'Top candidates for SAP ABAP', date: 'Today' },
-            { id: 's2', title: 'Q2 Open Invoices by Vendor', date: 'Yesterday' },
-            { id: 's3', title: 'Sales revenue breakdown 2026', date: 'Last week' },
-          ])
+          // An empty sidebar is the truth when the API is down; invented
+          // conversations were indistinguishable from real ones.
+          setSessions([])
         }
       })()
   }, [loggedIn, sessionToken, api])
@@ -696,6 +731,15 @@ export default function Page() {
           continue
         }
         switch (parsed.type) {
+          case 'backend':
+            // Which source is actually answering — live HANA, Service Layer, or the
+            // sandbox. This event was already being sent and silently dropped.
+            setActiveBackend({
+              name: String(parsed.name ?? 'SAP'),
+              schema: String(parsed.schema ?? ''),
+              simulated: Boolean(parsed.simulated),
+            })
+            break
           case 'chunk':
             patch((m) => ({ ...m, content: m.content + parsed.text, status: undefined }))
             break
@@ -703,13 +747,20 @@ export default function Page() {
             patch((m) => ({ ...m, status: parsed.text }))
             break
           case 'tabular':
-            patch((m) => ({
-              ...m,
-              data: parsed.data,
-              entity: parsed.entity,
-              meta: parsed.meta,
-              status: undefined,
-            }))
+            patch((m) => {
+              const tables = [
+                ...(m.tables || []),
+                { data: parsed.data, meta: parsed.meta, entity: parsed.entity, chart: undefined },
+              ].slice(-4)
+              return {
+                ...m,
+                tables,
+                data: parsed.data,
+                entity: parsed.entity,
+                meta: parsed.meta,
+                status: undefined,
+              }
+            })
             break
           case 'form':
             patch((m) => ({
@@ -723,7 +774,11 @@ export default function Page() {
             }))
             break
           case 'chart':
-            patch((m) => ({ ...m, chart: parsed }))
+            patch((m) => {
+              const tables = [...(m.tables || [])]
+              if (tables.length) tables[tables.length - 1] = { ...tables[tables.length - 1], chart: parsed }
+              return { ...m, tables, chart: m.chart || parsed }
+            })
             break
           case 'source':
             patch((m) => ({
@@ -781,52 +836,21 @@ export default function Page() {
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        // Friendly simulated streaming response if backend is offline
-        const fullContent = `Here is the requested analysis for **"${value}"**:\n\n- Found **1,255 total candidate records** and verified active talent pipelines.\n- Top skills matched: \`SAP ABAP\`, \`SAP FICO\`, \`SAP HANA\`, and \`S/4HANA\`.\n- Conversion rate is currently tracking at **+1%** with 10 confirmed hires.`
-        
-        let i = 0
-        const interval = setInterval(() => {
-          patch((m) => ({
-            ...m,
-            content: fullContent.slice(0, i),
-            status: undefined,
-          }))
-          i += 3 // Stream 3 characters at a time
-          
-          if (i > fullContent.length) {
-            clearInterval(interval)
-            // Once text is fully typed, show charts and data
-            setTimeout(() => {
-              patch((m) => ({
-                ...m,
-                content: fullContent,
-                chart: {
-                  chartType: 'bar',
-                  title: 'Candidate Distribution by Skill Area',
-                  data: [
-                    { skill: 'SAP ABAP', count: 480 },
-                    { skill: 'SAP FICO', count: 320 },
-                    { skill: 'SAP HANA', count: 240 },
-                    { skill: 'SAP SD', count: 125 },
-                    { skill: 'SAP MM', count: 90 },
-                  ],
-                  xKey: 'skill',
-                  yKey: 'count',
-                },
-                data: [
-                  { Name: 'Nitya Jain', Skill: 'SAP ABAP', Experience: '3.1 yrs', Status: 'Screening', Company: 'Samishti Infotech' },
-                  { Name: 'Sankar K', Skill: 'SAP FICO', Experience: '11.0 yrs', Status: 'New Lead', Company: 'Atos' },
-                  { Name: 'Rahul Kumar', Skill: 'SAP HANA', Experience: '5.4 yrs', Status: 'In Interview', Company: 'Infosys' },
-                  { Name: 'Ananya Patel', Skill: 'SAP SD', Experience: '7.0 yrs', Status: 'Offer', Company: 'Wipro Tech' },
-                  { Name: 'Vikram Singh', Skill: 'SAP Fiori', Experience: '4.2 yrs', Status: 'Selected', Company: 'TCS' },
-                ],
-                entity: 'Talent & SAP Query Results',
-                sources: ['OINV_SAP_TABLE', 'CANDIDATE_DB'],
-              }))
-              setIsThinking(false)
-            }, 300)
-          }
-        }, 15) // Speed of typing
+        // A backend outage used to be papered over with a *fabricated* answer:
+        // invented record counts, an invented table and an invented chart, none of
+        // it marked as fake. In a reporting tool that is the worst possible failure
+        // mode (someone screenshots it into a board deck), so report the outage.
+        patch((m) => ({
+          ...m,
+          content:
+            '⚠ **No answer — the CIRA API could not be reached.**\n\n' +
+            'Nothing was retrieved from SAP, so there are no figures to show. Start the ' +
+            'backend (`uvicorn main:app`) and check connectivity with ' +
+            '`python ../scripts/diagnose.py` from the Backend folder.',
+          error: 'Backend unreachable — no SAP data retrieved.',
+          status: undefined,
+        }))
+        showToast('Backend unreachable — no data was retrieved.', 'error')
       }
     } finally {
       setIsThinking(false)
@@ -856,22 +880,14 @@ export default function Page() {
           meta: m.meta,
           chart: m.chart,
           form: m.form,
+          tables: m.tables as ResultTable[] | undefined,
+          timestamp: m.timestamp,
+          error: m.meta?.error || undefined,
         }))
       )
     } catch {
-      // demo messages
-      setMessages([
-        {
-          role: 'user',
-          content: title,
-          timestamp: '10:30 AM',
-        },
-        {
-          role: 'assistant',
-          content: `Displaying historical intelligence data for **${title}**. All enterprise parameters are synced.`,
-          timestamp: '10:31 AM',
-        },
-      ])
+      setMessages([])
+      showToast('Could not load this conversation from the server.', 'error')
     }
   }
 
@@ -1006,8 +1022,20 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Settings & Logout */}
+        {/* Settings, theme & logout */}
         <div className="mt-auto pt-4 px-2 space-y-1">
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </div>
+            <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </span>
+          </button>
           <button
             onClick={() => setShowProfile(true)}
             className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-colors overflow-hidden"
@@ -1040,7 +1068,29 @@ export default function Page() {
         >
           <Menu size={20} />
         </button>
+
         <div className="flex-1 overflow-hidden flex flex-col relative">
+
+          {/* Which SAP source is answering. The `backend` SSE event used to be
+              sent by the agent and dropped by the UI, so "SIMULATED" only ever
+              appeared on an individual table. */}
+          {activeBackend && (
+            <div className="absolute top-3 right-3 md:top-4 md:right-6 z-20 pointer-events-none">
+              <span
+                title={`${activeBackend.name}${activeBackend.schema ? ' · ' + activeBackend.schema : ''}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border backdrop-blur ${
+                  activeBackend.simulated
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${activeBackend.simulated ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {activeBackend.simulated
+                  ? 'Simulated data'
+                  : `${activeBackend.name}${activeBackend.schema ? ' · ' + activeBackend.schema : ''}`}
+              </span>
+            </div>
+          )}
 
           {/* Scrollable Content Area */}
           <div className="w-full h-full flex flex-col pt-16 md:pt-12 pb-6 px-4 md:px-8 overflow-y-auto scrollbar-none" ref={scrollRef} onScroll={handleScroll}>
@@ -1056,7 +1106,7 @@ export default function Page() {
                       </span>
                     </h1>
                     <h2 className="text-2xl md:text-[40px] leading-tight font-semibold tracking-tight text-gray-400 text-center">
-                      How can I help you today?
+                      {greeting} — how can I help you today?
                     </h2>
                   </div>
 
@@ -1066,7 +1116,7 @@ export default function Page() {
 
                     {/* Database Query Card */}
                     <div
-                      onClick={() => submitQuery('Show candidate database with SAP HANA skills')}
+                      onClick={() => submitQuery('List customers with the largest outstanding balance')}
                       className="col-span-1 bg-gradient-to-br from-[#f8faff] to-[#f0f5ff] rounded-2xl p-4 shadow-md border border-blue-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-blue-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-left"
                       style={{ animationDelay: '100ms' }}
                     >
@@ -1074,17 +1124,17 @@ export default function Page() {
                         <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
                           <Database size={14} />
                         </div>
-                        <h3 className="font-bold text-gray-900 text-sm">Candidate Search</h3>
+                        <h3 className="font-bold text-gray-900 text-sm">Customer Balances</h3>
                       </div>
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold mt-2 self-start">
                         <Sparkles size={10} />
-                        "Show candidates with SAP HANA"
+&ldquo;Top customers by balance&rdquo;
                       </div>
                     </div>
 
                     {/* Financial Ledger Card */}
                     <div
-                      onClick={() => submitQuery('Summarize all open invoices from last quarter')}
+                      onClick={() => submitQuery('Summarize open invoices from last quarter')}
                       className="col-span-1 bg-gradient-to-br from-[#fffaf5] to-[#fff3e5] rounded-2xl p-4 shadow-md border border-orange-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-orange-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-right"
                       style={{ animationDelay: '200ms', opacity: 0, animationFillMode: 'forwards' }}
                     >
@@ -1096,7 +1146,7 @@ export default function Page() {
                       </div>
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-[11px] font-bold mt-2 self-start">
                         <Sparkles size={10} />
-                        "Summarize open invoices from Q3"
+                        &ldquo;Summarize open invoices from Q3&rdquo;
                       </div>
                     </div>
 
@@ -1114,13 +1164,13 @@ export default function Page() {
                       </div>
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold mt-2 self-start">
                         <Sparkles size={10} />
-                        "Pie chart of stock by warehouse"
+                        &ldquo;Pie chart of stock by warehouse&rdquo;
                       </div>
                     </div>
 
                     {/* Interview Ratings Card */}
                     <div
-                      onClick={() => submitQuery('Top 10 candidates by interview rating')}
+                      onClick={() => submitQuery('Top 10 items by revenue in the last quarter')}
                       className="col-span-1 bg-gradient-to-br from-[#fbf5ff] to-[#f4e6ff] rounded-2xl p-4 shadow-md border border-purple-100 cursor-pointer hover:shadow-xl hover:-translate-y-2 hover:shadow-purple-500/20 transition-all duration-300 group flex flex-col justify-between animate-fly-in-bottom"
                       style={{ animationDelay: '400ms', opacity: 0, animationFillMode: 'forwards' }}
                     >
@@ -1128,11 +1178,11 @@ export default function Page() {
                         <div className="w-7 h-7 rounded-lg bg-purple-500 flex items-center justify-center text-white shadow-sm shadow-purple-500/20">
                           <Users size={14} />
                         </div>
-                        <h3 className="font-bold text-gray-900 text-sm">Talent Analytics</h3>
+                        <h3 className="font-bold text-gray-900 text-sm">Revenue by Item</h3>
                       </div>
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 text-[11px] font-bold mt-2 self-start">
                         <Sparkles size={10} />
-                        "Top 10 candidates by rating"
+                        &ldquo;Top 10 items by revenue&rdquo;
                       </div>
                     </div>
 
@@ -1204,14 +1254,28 @@ export default function Page() {
                             />
                           </div>
                         )}
-                        {(message.chart || (message.data !== undefined && message.data !== null)) && (
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 w-full items-start">
-                            {message.chart && <ChartCard payload={message.chart} />}
-                            {message.data !== undefined && message.data !== null && (
-                              <DataCard payload={message.data} entity={message.entity} meta={message.meta} />
-                            )}
+                        {message.error && (
+                          <div className="mt-3 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                            {message.error}
                           </div>
                         )}
+                        {(message.tables?.length ? message.tables : [
+                          {
+                            data: message.data,
+                            meta: message.meta,
+                            entity: message.entity,
+                            chart: message.chart,
+                          },
+                        ])
+                          .filter((t) => t.chart || (t.data !== undefined && t.data !== null))
+                          .map((t, ti) => (
+                            <div key={ti} className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 w-full items-start">
+                              {t.chart && <ChartCard payload={t.chart} />}
+                              {t.data !== undefined && t.data !== null && (
+                                <DataCard payload={t.data} entity={t.entity} meta={t.meta} />
+                              )}
+                            </div>
+                          ))}
                       </>
                     )}
                   </div>

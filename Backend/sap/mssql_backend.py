@@ -13,17 +13,31 @@ import time
 from typing import Any
 
 import config
+
 from .base import DataBackend
 from .serialize import to_jsonable
+from .sql_guard import rebind_param_markers
 from .types_ import ColumnInfo, SapUnavailableError, TableInfo
 
 log = logging.getLogger("cira.mssql")
+
+_ALLOWED_EXTRA_SCHEMAS = "MSSQL_EXTRA_SCHEMAS"
+
+
+def _safe_error(exc: Exception) -> str:
+    text = str(exc) or exc.__class__.__name__
+    for token in (str(config.MSSQL_HOST), str(config.MSSQL_USER), str(config.MSSQL_PASSWORD)):
+        if token:
+            text = text.replace(token, "[redacted]")
+    return text[:300]
 
 
 class MssqlBackend(DataBackend):
     name = "Microsoft SQL Server"
     dialect = "mssql"
     simulated = False
+    # Read-only by design: no `write` capability, so /sap/write never lands here.
+    capabilities = frozenset({"sql", "catalog"})
 
     def __init__(
         self,
@@ -34,20 +48,50 @@ class MssqlBackend(DataBackend):
         database: str | None = None,
         pool_size: int | None = None,
     ):
-        tenant = config.CURRENT_TENANT.get() or {}
-        self.host = host or tenant.get("MSSQL_HOST", config.MSSQL_HOST)
-        self.port = port or tenant.get("MSSQL_PORT", config.MSSQL_PORT)
-        self.user = user or tenant.get("MSSQL_USER", config.MSSQL_USER)
-        self.password = password or tenant.get("MSSQL_PASSWORD", config.MSSQL_PASSWORD)
-        self.schema = (database or tenant.get("MSSQL_DATABASE", config.MSSQL_DATABASE) or "").strip()
-        self.pool_size = max(1, pool_size or tenant.get("MSSQL_POOL_SIZE", config.MSSQL_POOL_SIZE))
-        
-        self._pool: queue.LifoQueue = queue.LifoQueue()
+        tenant = config.CURRENT_TENANT.get() or None
+        self.host = host or str(config.resolve(tenant, "MSSQL_HOST", config.MSSQL_HOST))
+        self.port = port or int(config.resolve(tenant, "MSSQL_PORT", config.MSSQL_PORT))
+        self.user = user or str(config.resolve(tenant, "MSSQL_USER", config.MSSQL_USER))
+        self.password = password or str(config.resolve(tenant, "MSSQL_PASSWORD", config.MSSQL_PASSWORD))
+        # `schema` is the *database* name here (the field the rest of CIRA shows
+        # as "schema"); MSSQL_SCHEMA is the inside-database schema, usually dbo.
+        self.database = (
+            database or str(config.resolve(tenant, "MSSQL_DATABASE", config.MSSQL_DATABASE)) or ""
+        ).strip()
+        self.schema = self.database
+        self._sql_schema = (
+            str(config.resolve(tenant, "MSSQL_SCHEMA", config.MSSQL_SCHEMA)) or "dbo"
+        ).strip()
+        self.pool_size = max(
+            1, pool_size or int(config.resolve(tenant, "MSSQL_POOL_SIZE", config.MSSQL_POOL_SIZE))
+        )
+        if not self.host or not self.user or not self.password or not self.database:
+            raise config.ConfigError(
+                "SQL Server is not fully configured (MSSQL_HOST / MSSQL_USER / "
+                "MSSQL_PASSWORD / MSSQL_DATABASE are required in Backend/.env)."
+            )
+        self._max_total = self.pool_size * 4
+        self._slots = threading.BoundedSemaphore(self._max_total)
+        self._pool: queue.LifoQueue = queue.LifoQueue(maxsize=self.pool_size)
+        self._ping_cache: tuple[float, dict] | None = None
         self._created = 0
         self._lock = threading.Lock()
         self._catalog_lock = threading.Lock()
         self._tables_cache: tuple[float, list[TableInfo]] | None = None
         self._columns_cache: dict[str, tuple[float, list[ColumnInfo]]] = {}
+
+    # NOTE: `sql_schema` is a property on DataBackend, so it must be overridden
+    # as a property here too (assigning self.sql_schema in __init__ would raise
+    # AttributeError: can't set attribute).
+    @property
+    def sql_schema(self) -> str:  # type: ignore[override]
+        return self._sql_schema
+
+    @property
+    def allowed_schemas(self) -> list[str]:  # type: ignore[override]
+        """dbo (or the configured schema) plus any explicit MSSQL extras."""
+        extra = [x.strip().upper() for x in (config.HANA_EXTRA_SCHEMAS or []) if x.strip()]
+        return [s for s in [self._sql_schema.upper(), *extra] if s]
 
     # ── connections ──────────────────────────────────────────────────────────
     def _connect(self):
@@ -55,62 +99,75 @@ class MssqlBackend(DataBackend):
             import pymssql
         except ImportError as exc:  # pragma: no cover
             raise SapUnavailableError(
-                "pymssql is not installed — run `pip install pymssql`."
+                "pymssql is not installed in this venv — `pip install pymssql`, or "
+                "use the official MS Driver for Python (ODBC) if the company standard "
+                "requires signing/certificates."
             ) from exc
 
         try:
             # pymssql connects to server:port or server if port is default
-            server = f"{self.host}:{self.port}" if self.port else self.host
+            # pymssql takes host:port, or host\instance for named instances.
+            server = f"{self.host}:{self.port}" if self.port and self.port != 1433 else self.host
             return pymssql.connect(
                 server=server,
                 user=self.user,
                 password=self.password,
-                database=self.schema,
+                database=self.database,
                 login_timeout=max(1, config.MSSQL_CONNECT_TIMEOUT // 1000),
-                autocommit=True
+                # Per-query timeout: without it a runaway SELECT holds a pooled
+                # connection (and locks nothing, but starves the pool) forever.
+                timeout=config.MSSQL_QUERY_TIMEOUT,
+                autocommit=True,
             )
         except Exception as exc:
             raise SapUnavailableError(f"MSSQL connection failed: {exc}") from exc
 
     def _acquire(self):
         try:
-            conn = self._pool.get_nowait()
-            try:
-                # Basic liveness check for pymssql (no built-in isconnected(), we assume it's alive or ping it)
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-                return conn
-            except Exception:
+            while True:
+                conn = self._pool.get_nowait()
                 try:
-                    conn.close()
+                    # pymssql has no isconnected(); a 1-row round trip is the check.
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                    cur.close()
+                    return conn
                 except Exception:
-                    pass
+                    try:
+                        conn.close()
+                    finally:
+                        self._slots.release()
         except queue.Empty:
             pass
 
+        if not self._slots.acquire(timeout=max(1.0, config.MSSQL_CONNECT_TIMEOUT / 1000 * 2)):
+            raise SapUnavailableError(
+                f"SQL Server pool is saturated ({self._max_total} connections in use)."
+            )
         with self._lock:
             self._created += 1
         try:
             return self._connect()
-        except Exception as exc:
+        except Exception:
             with self._lock:
                 self._created -= 1
+            self._slots.release()
             raise
 
     def _release(self, conn) -> None:
         if conn is None:
             return
         try:
-            if self._pool.qsize() < self.pool_size:
-                self._pool.put_nowait(conn)
-                return
+            self._pool.put_nowait(conn)
+            return
         except Exception:
             pass
         try:
             conn.close()
         except Exception:
             pass
+        self._slots.release()
 
     def close(self) -> None:
         while True:
@@ -122,18 +179,18 @@ class MssqlBackend(DataBackend):
                 conn.close()
             except Exception:
                 pass
+            finally:
+                self._slots.release()
 
     # ── raw execution ────────────────────────────────────────────────────────
     def execute(self, sql: str, params: list[Any] | None = None) -> tuple[list[str], list[tuple]]:
         conn = self._acquire()
         cursor = None
         try:
-            # Replace HANA ? parameter markers with %s for pymssql if any
-            sql_mssql = sql.replace("?", "%s")
-            
-            # Remove HANA quotes in schema."TABLE" for MSSQL schema..[TABLE] or dbo.[TABLE]
-            # Since B1 usually uses `dbo`, we'll just run queries directly if they have quotes
-            # or try to let pymssql handle it.
+            # Bind at the *marker* level: a blind sql.replace("?", "%s") used to
+            # corrupt literal question marks inside string literals and left
+            # unescaped % (LIKE patterns) to break pymssql's % interpolation.
+            sql_mssql = rebind_param_markers(sql, "format")
             cursor = conn.cursor()
             cursor.execute(sql_mssql, tuple(params or ()))
             columns = [d[0] for d in (cursor.description or [])]
@@ -159,29 +216,34 @@ class MssqlBackend(DataBackend):
         return out
 
     # ── health / schema discovery ────────────────────────────────────────────
-    def ping(self) -> dict:
-        started = time.time()
+    def ping(self, force: bool = False) -> dict:
+        now = time.time()
+        if not force and self._ping_cache and now - self._ping_cache[0] < config.HEALTH_CACHE_TTL_S:
+            return dict(self._ping_cache[1], cached=True)
+        started = now
         try:
-            info = self._fetch_dicts("SELECT SYSTEM_USER as [user], DB_NAME() as [schema], @@VERSION as [version]")
+            info = self._fetch_dicts(
+                "SELECT DB_NAME() AS [database], @@VERSION AS [version], "
+                "DATABASEPROPERTYEX(DB_NAME(), 'Updateability') AS [readwrite]"
+            )
             detail = info[0] if info else {}
-            return {
+            result = {
                 "ok": True,
                 "backend": self.name,
-                "host": f"{self.host}:{self.port}",
                 "schema": self.schema,
-                "user": detail.get("user"),
-                "version": detail.get("version"),
+                "server_version": detail.get("version"),
                 "latency_ms": int((time.time() - started) * 1000),
             }
         except Exception as exc:
-            return {
+            result = {
                 "ok": False,
                 "backend": self.name,
-                "host": f"{self.host}:{self.port}",
                 "schema": self.schema,
-                "error": str(exc),
+                "error": _safe_error(exc),
                 "latency_ms": int((time.time() - started) * 1000),
             }
+        self._ping_cache = (time.time(), result)
+        return dict(result)
 
     # ── catalog ──────────────────────────────────────────────────────────────
     def list_tables(self, pattern: str = "", include_views: bool = True,
@@ -209,18 +271,22 @@ class MssqlBackend(DataBackend):
         return result[:limit]
 
     def _load_tables(self) -> list[TableInfo]:
+        # Restrict the catalog to the configured schema so a second database on
+        # the same server cannot leak its table list into the agent's choices.
         sql = (
-            "SELECT name, 'TABLE' AS kind "
-            "FROM sys.tables "
+            "SELECT t.name, 'TABLE' AS kind FROM sys.tables t "
+            "JOIN sys.schemas sc ON sc.schema_id = t.schema_id "
+            "WHERE sc.name = %s "
             "UNION ALL "
-            "SELECT name, 'VIEW' AS kind "
-            "FROM sys.views "
+            "SELECT v.name, 'VIEW' AS kind FROM sys.views v "
+            "JOIN sys.schemas sc2 ON sc2.schema_id = v.schema_id "
+            "WHERE sc2.name = %s "
             "ORDER BY 1"
         )
         try:
-            rows = self._fetch_dicts(sql)
+            rows = self._fetch_dicts(sql, [self._sql_schema, self._sql_schema])
             counts = self._record_counts()
-            
+
             # Attempt to fetch extended properties (comments)
             comments = {}
             try:
@@ -234,7 +300,7 @@ class MssqlBackend(DataBackend):
                     comments[r["name"]] = str(r["comments"])
             except Exception:
                 pass
-                
+
             tables = []
             for r in rows:
                 name = r["name"]
@@ -283,11 +349,11 @@ class MssqlBackend(DataBackend):
             "JOIN sys.types t ON c.user_type_id = t.user_type_id "
             "JOIN sys.objects o ON c.object_id = o.object_id "
             "LEFT JOIN sys.extended_properties ep ON ep.major_id = c.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description' "
-            "WHERE UPPER(o.name) = %s "
+            "WHERE UPPER(o.name) = %s AND SCHEMA_NAME(o.schema_id) = %s "
             "ORDER BY c.column_id"
         )
         try:
-            rows = self._fetch_dicts(sql, [key])
+            rows = self._fetch_dicts(sql, [key, self._sql_schema])
             cols = [
                 ColumnInfo(
                     name=r["name"],
@@ -308,7 +374,9 @@ class MssqlBackend(DataBackend):
 
     def row_count(self, table: str) -> int | None:
         try:
-            rows = self._fetch_dicts(f'SELECT COUNT(*) AS c FROM [{table}]')
+            rows = self._fetch_dicts(
+                f"SELECT COUNT(*) AS c FROM [{self._sql_schema}].[{table.replace(']', ']]')}]"
+            )
             return int(rows[0]["c"]) if rows else None
         except Exception:
             return None

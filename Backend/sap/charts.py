@@ -56,7 +56,7 @@ def detect_chart_type(user_query: str, default: str = "bar") -> str:
 
 def _column_stats(rows: list[dict]) -> dict[str, dict]:
     stats: dict[str, dict] = {}
-    for key in rows[0].keys():
+    for key in rows[0]:
         values = [r.get(key) for r in rows]
         non_null = [v for v in values if v is not None and v != ""]
         numeric = [v for v in non_null if _is_number(v)]

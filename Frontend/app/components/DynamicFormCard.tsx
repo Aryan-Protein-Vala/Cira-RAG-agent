@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Save, Check, X, Loader2 } from 'lucide-react';
+import { Sparkles, Save, Check, X, Loader2, AlertTriangle } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -42,6 +42,8 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [simulated, setSimulated] = useState(false);
+  const [createdLabel, setCreatedLabel] = useState<string>('');
   const [success, setSuccess] = useState(() => {
     if (messageKey && typeof window !== 'undefined') {
       return localStorage.getItem(`form-success-${messageKey}`) === 'true';
@@ -73,11 +75,27 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({} as any));
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to create record');
+        throw new Error(data?.detail || `SAP rejected the record (HTTP ${res.status})`);
       }
-
+      // The sandbox used to return a plausible-looking DocEntry here, and this
+      // component printed "successfully written to SAP Business One" for data
+      // that was never written anywhere. Honour the simulated/created flags.
+      const result = (data?.result ?? {}) as Record<string, any>;
+      if (result.simulated || result.created === false || data?.simulated) {
+        setSimulated(true);
+        setError(
+          result._note ||
+          'Sandbox mode: nothing was written to SAP Business One.'
+        );
+        return;
+      }
+      setCreatedLabel(
+        result.DocEntry !== undefined ? `DocEntry ${result.DocEntry}` :
+        result.CardCode !== undefined ? `CardCode ${result.CardCode}` :
+        result.ItemCode !== undefined ? `ItemCode ${result.ItemCode}` : ''
+      );
       setSuccess(true);
       if (messageKey) {
         localStorage.setItem(`form-success-${messageKey}`, 'true');
@@ -92,7 +110,7 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
     }
   };
 
-  if (success) {
+  if (success && !error) {
     return (
       <div className="chart-card-wrapper bg-white border border-indigo-100 rounded-2xl p-6 w-full shadow-lg my-2 transform hover:-translate-y-1 transition-all duration-300">
         <div className="flex items-center gap-3 text-indigo-600 mb-2">
@@ -102,7 +120,8 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
           <h3 className="font-bold text-lg">Record Created</h3>
         </div>
         <p className="text-sm text-gray-600 ml-11 font-medium">
-          The {payload.entity} record has been successfully written to SAP Business One.
+          The {payload.entity} record was accepted by SAP Business One
+          {createdLabel ? ` (${createdLabel})` : ''}.
         </p>
       </div>
     );
@@ -169,8 +188,14 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
         ))}
 
         {error && (
-          <div className="col-span-1 md:col-span-2 bg-rose-50 border border-rose-200 text-rose-600 p-4 rounded-xl flex items-start gap-3 text-xs mt-2 shadow-sm font-semibold">
-            <X size={16} className="mt-0.5 shrink-0" />
+          <div
+            className={`col-span-1 md:col-span-2 p-4 rounded-xl flex items-start gap-3 text-xs mt-2 shadow-sm font-semibold border ${
+              simulated
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-rose-50 border-rose-200 text-rose-600'
+            }`}
+          >
+            {simulated ? <AlertTriangle size={16} className="mt-0.5 shrink-0" /> : <X size={16} className="mt-0.5 shrink-0" />}
             <p className="leading-relaxed">{error}</p>
           </div>
         )}

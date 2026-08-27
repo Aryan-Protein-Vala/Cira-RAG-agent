@@ -156,7 +156,7 @@ def test_group_by_with_aggregate_and_year_filter():
 
 def test_sqlite_dialect_uses_limit_and_strftime():
     spec = query_spec.spec_from_payload({"table": "ORDR", "year": 2024, "limit": 7})
-    sql, params = query_spec.build_select(spec, _resolver(), "sqlite")
+    sql, _params = query_spec.build_select(spec, _resolver(), "sqlite")
     assert "LIMIT 7" in sql
     assert "TOP" not in sql
     assert "strftime" in sql

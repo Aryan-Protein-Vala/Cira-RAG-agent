@@ -1,0 +1,22 @@
+# Lint config. Deliberately narrow: the point is to catch real defects
+# (unused/ambiguous imports, shadowed bindings, mutable defaults, missing
+# zip strictness, mutable class attrs) — not to churn a working codebase.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["F", "E", "W", "I", "B", "UP", "RUF", "SIM", "PLC"]
+ignore = [
+  "B008",    # Depends(...) in argument defaults is the FastAPI idiom
+  "B904",    # raise-from inside error paths is nice-to-have
+  "BLE001",  # broad excepts in deliberate fallback/resilience paths
+  "E501",    # not a formatter-enforced codebase
+  "RUF001",  # intentional typographic characters (₹, ·, —) in user-facing text
+  "RUF002",
+  "RUF003",
+  "SIM105",  # try/except/pass reads better here than contextlib.suppress
+  "PLC0415", # deferred imports break import cycles on purpose
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011", "PLR2004", "F841"]

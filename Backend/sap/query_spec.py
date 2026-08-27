@@ -12,8 +12,9 @@ this module renders dialect-correct SQL:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from . import entities
 from .types_ import ColumnInfo, SapDataError
@@ -124,10 +125,24 @@ class ColumnResolver:
         return [c for c in self.columns if c.is_date]
 
 
-def _q(identifier: str) -> str:
+def _q(identifier: str, dialect: str = "hana") -> str:
+    """Quote an identifier for the target dialect.
+
+    SQL Server uses [brackets]; HANA and SQLite use double quotes. (Relying on
+    QUOTED_IDENTIFIER being ON for double quotes in T-SQL is a driver/session
+    setting we do not control, so we never emit them for mssql.)
+    """
     if not _IDENT_RE.match(identifier or ""):
         raise SapDataError(f"Illegal identifier: {identifier!r}")
-    return '"' + identifier.replace('"', "") + '"'
+    clean = identifier.replace('"', "").replace("[", "").replace("]", "")
+    if dialect == "mssql":
+        return "[" + clean.replace("]", "]]") + "]"
+    return '"' + clean + '"'
+
+
+def _trim(expr: str, dialect: str) -> str:
+    """TRIM() does not exist before SQL Server 2017, which most B1 installs run."""
+    return f"LTRIM(RTRIM({expr}))" if dialect == "mssql" else f"TRIM({expr})"
 
 
 def _alias_for(agg: Aggregate) -> str:
@@ -138,7 +153,7 @@ def _alias_for(agg: Aggregate) -> str:
     return f"{agg.func.replace('_', ' ').title().replace(' ', '')}_{agg.column}"[:40]
 
 
-def _agg_sql(agg: Aggregate, resolver: ColumnResolver) -> str:
+def _agg_sql(agg: Aggregate, resolver: ColumnResolver, dialect: str = "hana") -> str:
     func = agg.func.lower().strip()
     if func not in AGG_FUNCS:
         raise SapDataError(f"Unsupported aggregate '{agg.func}'. Use one of {sorted(AGG_FUNCS)}.")
@@ -146,8 +161,8 @@ def _agg_sql(agg: Aggregate, resolver: ColumnResolver) -> str:
         return "COUNT(*)"
     col = resolver.resolve(agg.column)
     if func == "count_distinct":
-        return f"COUNT(DISTINCT {_q(col.name)})"
-    return f"{func.upper()}({_q(col.name)})"
+        return f"COUNT(DISTINCT {_q(col.name, dialect)})"
+    return f"{func.upper()}({_q(col.name, dialect)})"
 
 
 def choose_default_columns(table: str, resolver: ColumnResolver, max_cols: int = 14) -> list[str]:
@@ -195,16 +210,18 @@ def build_select(
     if grouped:
         for gcol in spec.group_by:
             col = resolver.resolve(gcol)
-            select_parts.append(_q(col.name))
+            select_parts.append(_q(col.name, dialect))
         for agg in spec.aggregates:
-            select_parts.append(f"{_agg_sql(agg, resolver)} AS {_q(_alias_for(agg))}")
+            select_parts.append(
+                f"{_agg_sql(agg, resolver, dialect)} AS {_q(_alias_for(agg), dialect)}"
+            )
         if not spec.aggregates:
-            select_parts.append("COUNT(*) AS \"Count\"")
+            select_parts.append(f"COUNT(*) AS {_q('Count', dialect)}")
     else:
         cols = spec.columns or choose_default_columns(table, resolver)
         for c in cols:
             col = resolver.resolve(c)
-            select_parts.append(_q(col.name))
+            select_parts.append(_q(col.name, dialect))
         if not select_parts:
             select_parts.append("*")
 
@@ -216,7 +233,7 @@ def build_select(
         if op_key not in OPERATORS:
             raise SapDataError(f"Unsupported operator '{f.op}'.")
         sql_op = OPERATORS[op_key]
-        name = _q(col.name)
+        name = _q(col.name, dialect)
 
         if op_key == "isnull":
             where.append(f"{name} IS NULL")
@@ -266,7 +283,7 @@ def build_select(
         encoded = entities.encode_value(col.name, value)
         if isinstance(encoded, str) and not col.is_numeric and not col.is_date and op_key == "eq":
             # B1 stores padded/cased codes inconsistently — compare case-insensitively
-            where.append(f"UPPER(TRIM({name})) = UPPER(?)")
+            where.append(f"UPPER({_trim(name, dialect)}) = UPPER(?)")
             params.append(str(encoded).strip())
         else:
             where.append(f"{name} {sql_op} ?")
@@ -283,7 +300,7 @@ def build_select(
         for cname in targets:
             if not resolver.exists(cname):
                 continue
-            ors.append(f"UPPER({_q(resolver.resolve(cname).name)}) LIKE UPPER(?)")
+            ors.append(f"UPPER({_q(resolver.resolve(cname).name, dialect)}) LIKE UPPER(?)")
             params.append(f"%{spec.search_text}%")
         if ors:
             where.append("(" + " OR ".join(ors) + ")")
@@ -321,35 +338,39 @@ def build_select(
         direction = "DESC" if str(o.direction).lower().startswith("d") else "ASC"
         key = (o.column or "").lower()
         if key in alias_names:
-            order_parts.append(f"{_q(alias_names[key])} {direction}")
+            order_parts.append(f"{_q(alias_names[key], dialect)} {direction}")
         elif key in {"count", "value"} and grouped and not spec.aggregates:
-            order_parts.append(f'"Count" {direction}')
+            order_parts.append(f"{_q('Count', dialect)} {direction}")
         else:
             col = resolver.resolve(o.column)
             if grouped and col.name not in spec.group_by:
                 # ordering by a non-grouped column is invalid — aggregate it
-                order_parts.append(f"SUM({_q(col.name)}) {direction}")
+                order_parts.append(f"SUM({_q(col.name, dialect)}) {direction}")
             else:
-                order_parts.append(f"{_q(col.name)} {direction}")
+                order_parts.append(f"{_q(col.name, dialect)} {direction}")
 
     if not order_parts:
-        if grouped and (spec.aggregates or True):
+        if grouped:
             first_measure = (
-                _q(_alias_for(spec.aggregates[0])) if spec.aggregates else '"Count"'
+                _q(_alias_for(spec.aggregates[0]), dialect)
+                if spec.aggregates else _q("Count", dialect)
             )
             order_parts.append(f"{first_measure} DESC")
         else:
             sem = entities.semantics_for(table)
             for cand in (sem.get("date"), sem.get("key")):
                 if cand and resolver.exists(cand):
-                    order_parts.append(f"{_q(resolver.resolve(cand).name)} DESC")
+                    order_parts.append(f"{_q(resolver.resolve(cand).name, dialect)} DESC")
                     break
 
     limit = max(1, int(spec.limit or 500))
 
     distinct = "DISTINCT " if spec.distinct and not grouped else ""
     cols_sql = ", ".join(select_parts)
-    qualified = f"{_q(schema)}.{_q(table)}" if schema and dialect != "sqlite" else _q(table)
+    qualified = (
+        f"{_q(schema, dialect)}.{_q(table, dialect)}" if schema and dialect != "sqlite"
+        else _q(table, dialect)
+    )
 
     if dialect == "sqlite":
         sql = f"SELECT {distinct}{cols_sql}\nFROM {qualified}"
@@ -359,7 +380,9 @@ def build_select(
     if where:
         sql += "\nWHERE " + "\n  AND ".join(where)
     if spec.group_by:
-        sql += "\nGROUP BY " + ", ".join(_q(resolver.resolve(g).name) for g in spec.group_by)
+        sql += "\nGROUP BY " + ", ".join(
+            _q(resolver.resolve(g).name, dialect) for g in spec.group_by
+        )
     if order_parts:
         sql += "\nORDER BY " + ", ".join(order_parts)
     if dialect == "sqlite":

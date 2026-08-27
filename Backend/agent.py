@@ -21,8 +21,9 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
@@ -30,11 +31,43 @@ from langchain_core.tools import StructuredTool
 import config
 import docs_store
 from sap import router as sap
-from sap.charts import build_chart, detect_chart_type
+from sap.charts import build_chart
 from sap.entities import known_entities, normalise_table_name
+from sap.router import BackendUnavailable
 from sap.types_ import QueryResult, SapDataError, SapUnavailableError
 
 log = logging.getLogger("cira.agent")
+
+
+def format_money(value, decimals: int = 2) -> str:
+    """₹ + Indian digit grouping: 80152384.27 -> "₹8,01,52,384.27".
+
+    The system prompt asks the model to answer in rupees, but a prompt is not a
+    guarantee: the deterministic planner (the mode that runs with no API key)
+    and the fallback summary must format money correctly on their own.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    negative = number < 0
+    number = abs(number)
+    if decimals:
+        whole, frac = f"{number:,.{decimals}f}".rsplit(".", 1)
+    else:
+        whole, frac = f"{number:,.0f}", ""
+    digits = whole.replace(",", "")
+    if len(digits) > 3:
+        head, tail = digits[:-3], digits[-3:]
+        chunks = []
+        while len(head) > 2:
+            chunks.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            chunks.insert(0, head)
+        whole = ",".join(chunks) + "," + tail
+    result = f"₹{whole}" + (f".{frac}" if frac else "")
+    return f"-{result}" if negative else result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -249,11 +282,11 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         except SapDataError as exc:
             return {"ok": False, "error": str(exc),
                     "hint": "Use sap_search_schema or sap_describe_table to find the right names."}
-        except SapUnavailableError as exc:
+        except (SapUnavailableError, BackendUnavailable) as exc:
             return {"ok": False, "error": f"SAP is unreachable: {exc}"}
         except Exception as exc:
             log.exception("sap_query failed")
-            return {"ok": False, "error": str(exc)}
+            return {"ok": False, "error": _safe_message(exc)}
 
         bus.note_source(result.source)
         bus.push(
@@ -290,10 +323,10 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
             result = await sap.run_sql(sql, limit=config.DEFAULT_ROW_LIMIT)
         except SapDataError as exc:
             return {"ok": False, "error": str(exc)}
-        except SapUnavailableError as exc:
+        except (SapUnavailableError, BackendUnavailable) as exc:
             return {"ok": False, "error": f"SAP is unreachable: {exc}"}
         except Exception as exc:
-            return {"ok": False, "error": f"SQL failed: {exc}"}
+            return {"ok": False, "error": f"SQL failed: {_safe_message(exc)}"}
 
         bus.note_source(result.source)
         bus.push(
@@ -348,6 +381,9 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
                    - default:  A pre-filled default value.
                    - hint:     Short helper text shown under the field.
 
+        If data entry is disabled on this deployment this tool returns an error;
+        in that case tell the user writes are not enabled, do not invent a form.
+
         RULES:
         - Include ONLY mandatory fields (required: true). Skip optional fields.
         - For fields with a known set of values (CardType, DocCurrency, etc.), use type="select"
@@ -357,6 +393,17 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         - Always include DocDate (today) as a date field with a sensible default.
         - The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
         """
+        if not config.SAP_WRITE_ENABLED:
+            # Rendering a form whose Submit button is guaranteed to 403 is worse
+            # than saying "data entry is closed on this deployment".
+            return {
+                "ok": False,
+                "error": (
+                    "Data entry is disabled on this deployment "
+                    "(CIRA_SAP_WRITE_ENABLED=false). Explain that CIRA is "
+                    "read-only here; do not render or describe a form."
+                ),
+            }
         bus.push_form(FormPayload(
             entity=entity,
             table=table,
@@ -383,6 +430,17 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         StructuredTool.from_function(coroutine=sap_data_entry_form, name="sap_data_entry_form",
                                      description=sap_data_entry_form.__doc__),
     ]
+
+
+def _safe_message(exc: Exception) -> str:
+    """Driver exceptions can carry host/user/SQL detail — trim before the browser."""
+    text = str(exc) or exc.__class__.__name__
+    for token in (config.HANA_HOST, config.HANA_USER, config.HANA_PASSWORD,
+                  config.MSSQL_HOST, config.MSSQL_PASSWORD, config.SAP_B1_PASSWORD,
+                  config.SERVICE_LAYER_BASE):
+        if token:
+            text = text.replace(str(token), "[redacted]")
+    return text[:400]
 
 
 def _guess_table_from_sql(sql: str) -> str:
@@ -428,9 +486,7 @@ class TextFilter:
         stripped = line.strip()
         if not stripped:
             return True
-        if _TABLE_LINE.match(line) or _DIVIDER.match(stripped) or _ROW_DUMP.match(line):
-            return False
-        return True
+        return not (_TABLE_LINE.match(line) or _DIVIDER.match(stripped) or _ROW_DUMP.match(line))
 
 
 def dataset_events(dataset: Dataset, user_query: str) -> list[dict]:
@@ -542,15 +598,35 @@ def _build_messages(query: str, history: list, employee_id: str, schema: str) ->
 async def stream_chat_query(
     query: str,
     history: list,
-    sap_token: str = "",
     employee_id: str = "UNKNOWN",
 ) -> AsyncGenerator[str, None]:
+    """Stream one answer: status/tool events, datasets, then the model's prose.
+
+    `sap_token` used to be threaded in from main.py for a per-user SAP identity
+    that does not exist (the technical user is shared) — carrying an unused
+    credential through the call chain only makes it look like authorisation is
+    per-user. Row-level authorisation is still an open item; see README §9.
+    """
+    import audit
+
+    audit.set_context(employee_id=employee_id)
     bus = ResultBus()
     backend = None
     try:
         backend = await asyncio.to_thread(sap.get_active_backend)
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         log.warning("backend probe failed: %s", exc)
+        yield sse({"type": "error", "text": f"SAP is not reachable: {exc}", "fatal": True})
+        yield sse({
+            "type": "chunk",
+            "text": (
+                "⚠ I could not reach any configured SAP source, so I have no data to "
+                "answer from. Nothing below is estimated. Ask an administrator to check "
+                "`python migrate_db.py --check`."
+            ),
+        })
+        yield sse({"type": "done"})
+        return
 
     schema = getattr(backend, "schema", config.HANA_SCHEMA)
     if backend is not None:
@@ -576,6 +652,7 @@ async def stream_chat_query(
     messages = _build_messages(query, history, employee_id, schema)
     text_filter = TextFilter()
     emitted_any_text = False
+    seen_sources: set[str] = set()
 
     try:
         async for event in agent.astream_events(
@@ -624,7 +701,10 @@ async def stream_chat_query(
                         "title": form.title,
                         "fields": form.fields,
                     })
-                for source in bus.sources:
+                for source in list(bus.sources):
+                    if source in seen_sources:
+                        continue
+                    seen_sources.add(source)
                     yield sse({"type": "source", "name": source})
 
         tail = text_filter.flush()
@@ -862,7 +942,7 @@ async def _deterministic_stream(query: str, bus: ResultBus, employee_id: str):
                     r.get("StockValue") or 0 for r in joined.rows if isinstance(r.get("StockValue"), (int, float))
                 )
                 text = (f"Stock is spread across {len(joined.rows)} item groups with a total "
-                        f"valuation of {total_value:,.0f}.")
+                        f"valuation of {format_money(total_value, 0)}.")
                 if joined.simulated:
                     text += " ⚠ Sandbox data — the live SAP HANA server is not reachable."
                 yield sse({"type": "chunk", "text": text})
@@ -873,9 +953,21 @@ async def _deterministic_stream(query: str, bus: ResultBus, employee_id: str):
     payload = plan_query(query)
     try:
         result = await sap.run_query(payload)
+    except (SapUnavailableError, BackendUnavailable, SapDataError) as exc:
+        message = _safe_message(exc)
+        yield sse({"type": "error", "text": f"⚠ SAP query failed: {message}"})
+        yield sse({
+            "type": "chunk",
+            "text": (
+                f"⚠ I could not fetch that data: {message}\n\n"
+                "No rows were retrieved, so there is nothing to summarise or estimate."
+            ),
+        })
+        return
     except Exception as exc:
-        yield sse({"type": "error", "text": f"⚠ SAP query failed: {exc}"})
-        yield sse({"type": "chunk", "text": f"⚠ I could not fetch that data: {exc}"})
+        message = _safe_message(exc)
+        yield sse({"type": "error", "text": f"⚠ SAP query failed: {message}"})
+        yield sse({"type": "chunk", "text": f"⚠ I could not fetch that data: {message}"})
         return
 
     dataset = Dataset(
@@ -903,8 +995,10 @@ async def _deterministic_stream(query: str, bus: ResultBus, employee_id: str):
     money = next((c for c in ("Total_DocTotal", "DocTotal", "Total", "Balance", "LineTotal",
                               "salary", "OnHand") if c in totals), None)
     if money:
-        sentence += (f" {money} totals {totals[money]['sum']:,.2f} "
-                     f"(avg {totals[money]['avg']:,.2f}, max {totals[money]['max']:,.2f}).")
+        sentence += (f" {money.replace('Total_', '').replace('_', ' ')} totals "
+                     f"{format_money(totals[money]['sum'])} "
+                     f"(avg {format_money(totals[money]['avg'])}, "
+                     f"max {format_money(totals[money]['max'])}).")
     if result.simulated:
         sentence += (" ⚠ This is sandbox data — the live SAP HANA server is not reachable "
                      "from this machine.")

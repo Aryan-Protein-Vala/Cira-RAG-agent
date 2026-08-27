@@ -1,0 +1,84 @@
+name: CI
+
+# Copy into .github/workflows/ci.yml to enable. Kept in ops/ so it can be reviewed
+# (and so this change can be pushed by tooling without `workflows` permission).
+# The repo already had a 52-test suite that needs no ERP, no network and no API
+# key — and a failing test was sitting on main. This is the minimum that keeps
+# that from happening again.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # hdbcli/pymssql are not needed for the suite (it runs on the sandbox)
+          pip install fastapi "uvicorn[standard]" pydantic python-multipart \
+            SQLAlchemy aiosqlite greenlet langchain-core langchain-openai langgraph \
+            httpx python-dotenv pytest pytest-asyncio ruff
+      - name: Lint
+        run: ruff check . --output-format=github
+      - name: Config sanity (must not boot on an unsafe config)
+        run: |
+          python - <<'EOF'
+          import os, sys
+          os.environ.setdefault("CIRA_DATA_SOURCE", "simulator")
+          sys.path.insert(0, ".")
+          import config
+          fatal, _ = config.validate()
+          assert fatal, "expected the strict CORS guard to reject an empty origin list"
+          print("strict mode rejected the unsafe config:", fatal[0][:60])
+          EOF
+
+      - name: Tests
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+
+  secret-scan:
+    # Guards the specific regression that started all this: a live `sa`
+    # password as a *default value* in config.py.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject credential defaults in config.py
+        run: |
+          if grep -nE '_str\("(HANA|MSSQL|SAP_B1)_(PASSWORD|USER)"[[:space:]]*,[[:space:]]*"[^"]+"' Backend/config.py; then
+            echo "::error::config.py must not default a credential to a literal"; exit 1
+          fi
+          if grep -nE '_str\(\s*"CIRA_ADMIN_(PASSWORD|ID)"\s*,\s*"[^"]+"' Backend/config.py; then
+            echo "::error::config.py must not ship an admin credential default"; exit 1
+          fi

@@ -38,7 +38,7 @@ Base = declarative_base()
 
 
 def _utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 class ChatSession(Base):

@@ -5,14 +5,17 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.ruff_cache/
 
 # Local state — never commit runtime data
 *.db
 *.db-wal
 *.db-shm
-data/
+data/*
 !data/.gitkeep
 
 # Secrets
 .env
+.env.*
+!.env.example
 .session_secret

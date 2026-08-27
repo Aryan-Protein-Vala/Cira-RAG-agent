@@ -1,7 +1,8 @@
 """Idempotent schema migration + connectivity check for CIRA.
 
-    python migrate_db.py            # migrate cira.db
-    python migrate_db.py --check    # also probe SAP HANA / Service Layer
+    python migrate_db.py                 # migrate cira.db
+    python migrate_db.py --check         # also validate config + probe every SAP source
+    python migrate_db.py --require-live  # ...and exit 1 unless a real ERP answered
 
 Only ever ADDs columns and indexes; nothing is dropped or rewritten.
 """
@@ -14,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import config  # noqa: E402
+import config
 
 DB_PATH = Path(config.DATABASE_PATH)
 
@@ -111,13 +112,35 @@ def migrate() -> None:
     conn.close()
 
 
-def check_sap() -> None:
+def check_sap() -> int:
+    """Print the effective configuration and which source would answer.
+
+    Returns a process exit code: 1 when the configuration is impossible/unsafe,
+    2 when --require-live was asked for and no live ERP answered. The previous
+    version always exited 0, so "simulated" looked like success in a deploy script.
+    """
     import asyncio
+
+    print("\nConfiguration check")
+    fatal, warnings = config.validate()
+    for problem in fatal:
+        print(f"  [ERROR] {problem}")
+    for note in warnings:
+        print(f"  [warn ] {note}")
+    print(f"  sources enabled : {config.enabled_sources() or 'NONE'}")
+    print(f"  company DBs     : {', '.join(sorted(config.TENANTS))}")
+    if fatal:
+        print("\n  Fix the [ERROR] lines before querying anything.")
+        return 1
 
     from sap import router as sap
 
     print("\nProbing SAP connectivity ...")
-    info = asyncio.run(sap.health())
+    try:
+        info = asyncio.run(sap.health(force=True))
+    except Exception as exc:
+        print(f"  [ERROR] no backend answered: {exc}")
+        return 1
     print(f"  Active backend : {info['active_backend']}")
     print(f"  Schema         : {info['schema']}")
     print(f"  Simulated      : {info['simulated']}")
@@ -125,14 +148,19 @@ def check_sap() -> None:
     for attempt in info.get("attempts", []):
         state = "OK " if attempt.get("ok") else "FAIL"
         print(f"   - [{state}] {attempt.get('candidate', attempt.get('backend'))}: "
-              f"{attempt.get('error', attempt.get('host', ''))}")
+              f"{attempt.get('error', 'ok')}")
     if info["simulated"]:
-        print("\n  ⚠ Running on the offline sandbox. Check HANA_* / SAP_B1_* in Backend/.env,")
-        print("    and confirm the HANA SQL port is reachable from this host:")
-        print(f"      python -c \"import socket;print(socket.create_connection(('{config.HANA_HOST}',{config.HANA_PORT}),5))\"")
+        print("\n  ⚠ SANDBOX DATA — every answer will be labelled SIMULATED.")
+        print("    This is not your ERP. Check HANA_* / SAP_B1_* in Backend/.env,")
+        print("    then re-run: python ../scripts/diagnose.py --require-live")
+        if "--require-live" in sys.argv:
+            return 2
+    return 0
 
 
 if __name__ == "__main__":
     migrate()
-    if "--check" in sys.argv:
-        check_sap()
+    code = 0
+    if "--check" in sys.argv or "--require-live" in sys.argv:
+        code = check_sap()
+    raise SystemExit(code)

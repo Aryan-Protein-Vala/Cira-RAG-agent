@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import config
+
 from .base import DataBackend
 from .sql_guard import translate_for_sqlite
 from .types_ import ColumnInfo, TableInfo
@@ -167,12 +168,9 @@ _DOC_LINE: list[Col] = [
 
 for _t in ("ORDR", "OINV", "OPOR", "OPCH", "ODLN", "OQUT", "ORIN"):
     SCHEMA[_t] = list(_DOC_HEADER)
-SCHEMA["OINV"] = list(_DOC_HEADER) + [
-    ("PaidToDate", "REAL", "DECIMAL(19,6)", "Amount already paid"),
-]
-SCHEMA["OPCH"] = list(_DOC_HEADER) + [
-    ("PaidToDate", "REAL", "DECIMAL(19,6)", "Amount already paid"),
-]
+_PAID = [("PaidToDate", "REAL", "DECIMAL(19,6)", "Amount already paid")]
+SCHEMA["OINV"] = [*_DOC_HEADER, *_PAID]
+SCHEMA["OPCH"] = [*_DOC_HEADER, *_PAID]
 for _t in ("RDR1", "INV1", "POR1", "PCH1", "DLN1", "QUT1"):
     SCHEMA[_t] = list(_DOC_LINE)
 
@@ -313,6 +311,7 @@ class SimulatorBackend(DataBackend):
     name = "SAP B1 Simulator (offline sandbox)"
     dialect = "sqlite"
     simulated = True
+    capabilities = frozenset({"sql", "catalog"})
 
     def __init__(self, path: Path | None = None, schema: str = ""):
         self.path = Path(path or config.SIMULATOR_DB_PATH)
@@ -365,7 +364,7 @@ class SimulatorBackend(DataBackend):
             self._local.conn = None
 
     # ── interface ────────────────────────────────────────────────────────────
-    def ping(self) -> dict:
+    def ping(self, force: bool = False) -> dict:
         started = time.time()
         try:
             self._conn().execute("SELECT 1").fetchone()
@@ -435,20 +434,24 @@ class SimulatorBackend(DataBackend):
         cur.close()
         return columns, rows
 
-    def create_entity(self, table_or_entity: str, data: dict) -> dict:
-        """Mock create_entity for the offline sandbox."""
-        # For a sandbox, we just pretend it succeeded and assign a random ID.
-        import random
-        # Optional: we could actually try to INSERT INTO the sqlite table if we want,
-        # but a mock response is usually enough for UI testing.
-        new_id = random.randint(300000, 999999)
+    def simulated_write(self, table_or_entity: str, data: dict) -> dict:
+        """Dry-run "write" for the offline sandbox: nothing is persisted.
+
+        This used to be called `create_entity` and returned a plausible-looking
+        DocEntry, which meant a demo click on "Submit" claimed a record had been
+        created in SAP. It is named differently from the real driver method so
+        the router can never route a production write here, and the response
+        states plainly that no data changed.
+        """
         return {
-            **data,
-            "DocEntry": new_id,
-            "DocNum": new_id,
-            "CardCode": data.get("CardCode", f"C{new_id}"),
-            "_simulated": True,
-            "_note": "This is a mock response from the offline sandbox.",
+            "ok": False,
+            "simulated": True,
+            "created": False,
+            "_note": (
+                "Sandbox mode: nothing was written to SAP Business One. Connect the "
+                "Service Layer (SAP_B1_*) and set CIRA_SAP_WRITE_ENABLED=true to create records."
+            ),
+            "echo": {k: v for k, v in list(data.items())[:40]},
         }
 
 
@@ -535,7 +538,7 @@ def _build_dataset(conn: sqlite3.Connection) -> None:
                                      if g["GroupType"] == ("C" if is_customer else "S")]),
             "Balance": round(rnd.uniform(-50000, 900000), 2) if is_customer else round(rnd.uniform(-200000, 300000), 2),
             "Phone1": f"+91-{rnd.randint(70,99)}{rnd.randint(10000000,99999999)}",
-            "E_Mail": f"accounts@{name.split()[0].lower()}.example.com",
+            "E_Mail": f"accounts@{name.split(maxsplit=1)[0].lower()}.example.com",
             "City": city,
             "Country": country,
             "Currency": "INR" if country == "IN" else rnd.choice(["USD", "EUR", "SGD"]),
@@ -549,7 +552,7 @@ def _build_dataset(conn: sqlite3.Connection) -> None:
 
     # Contacts
     contacts = []
-    for i, bp in enumerate(customers + vendors):
+    for bp in customers + vendors:
         for _ in range(rnd.randint(0, 2)):
             contacts.append({
                 "CntctCode": len(contacts) + 1,

@@ -32,7 +32,7 @@ def to_jsonable(value: Any) -> Any:
         rounded = round(value, 6)
         return int(rounded) if rounded.is_integer() and abs(rounded) < 1e15 else rounded
     if isinstance(value, decimal.Decimal):
-        if value != value:  # NaN
+        if value.is_nan() or value.is_infinite():
             return None
         as_float = float(value)
         # Keep integers integral so charts/tables don't render "1450.0"

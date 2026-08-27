@@ -20,6 +20,7 @@ import {
   Database,
 } from 'lucide-react'
 import { exportToCsv, exportToExcel, exportToJson } from '@/lib/export'
+import { formatCellValue, isMoneyColumn } from '@/lib/format'
 
 export interface MessageMeta {
   source?: string
@@ -37,15 +38,8 @@ export interface MessageMeta {
 const PAGE_SIZES = [10, 25, 50, 100]
 const DEFAULT_VISIBLE_COLUMNS = 6
 
-function formatCell(value: any): string {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'number') {
-    return Number.isInteger(value)
-      ? value.toLocaleString()
-      : value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-  }
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
+function formatCell(value: any, column?: string): string {
+  return formatCellValue(value, column)
 }
 
 export function DataCard({
@@ -349,7 +343,7 @@ export function DataCard({
               >
                 {visibleHeaders.map((header) => (
                   <td key={header} className="p-2.5 text-foreground whitespace-nowrap font-medium">
-                    {formatCell(row?.[header])}
+                    {formatCell(row?.[header], header)}
                   </td>
                 ))}
               </tr>
