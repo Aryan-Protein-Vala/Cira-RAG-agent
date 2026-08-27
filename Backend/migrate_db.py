@@ -53,6 +53,31 @@ EXPECTED = {
 }
 
 CREATE = {
+    # Tenant registry maintained by the admin panel (/admin/connections).
+    # `hana_secret` / `sl_secret` hold `env:VAR_NAME` or `enc:<token>` — never a raw
+    # password (see credential_store.py), so this table is safe to back up.
+    "company_connections": """
+        CREATE TABLE IF NOT EXISTS company_connections (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_db         VARCHAR NOT NULL UNIQUE,
+            display_name       VARCHAR,
+            enabled            INTEGER NOT NULL DEFAULT 1,
+            source_priority    VARCHAR,
+            hana_host          VARCHAR NOT NULL,
+            hana_port          INTEGER NOT NULL DEFAULT 30013,
+            hana_user          VARCHAR NOT NULL,
+            hana_secret        VARCHAR NOT NULL,
+            hana_encrypt       INTEGER NOT NULL DEFAULT 1,
+            hana_extra_schemas VARCHAR,
+            service_layer_port INTEGER DEFAULT 50000,
+            sl_user            VARCHAR,
+            sl_secret          VARCHAR,
+            sl_use_tls         INTEGER NOT NULL DEFAULT 1,
+            notes              VARCHAR,
+            created_at         DATETIME,
+            updated_at         DATETIME
+        )
+    """,
     "chat_sessions": """
         CREATE TABLE IF NOT EXISTS chat_sessions (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,6 +129,15 @@ def migrate() -> None:
 
     added = []
     for table, columns in EXPECTED.items():
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        if cur.fetchone() is None:
+            # Never ALTER a table that does not exist: the first cut of the admin
+            # panel added company_connections to EXPECTED but not to CREATE, so
+            # `python migrate_db.py` crashed for anyone following the README.
+            raise SystemExit(
+                f"[MIGRATE] table '{table}' is missing but no CREATE for it exists in "
+                "migrate_db.py — add it to CREATE (keep it in sync with database.py)."
+            )
         cur.execute(f"PRAGMA table_info({table})")
         existing = {r[1] for r in cur.fetchall()}
         for name, sql_type in columns.items():
@@ -112,6 +146,14 @@ def migrate() -> None:
                 cur.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
                 added.append(f"{table}.{name}")
     conn.commit()
+
+    missing = []
+    for table in EXPECTED:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        if cur.fetchone() is None:
+            missing.append(table)
+    if missing:
+        raise SystemExit(f"[MIGRATE] still missing tables after migration: {', '.join(missing)}")
 
     print("\nMigration complete.")
     print(f"  Columns added: {', '.join(added)}" if added else "  Schema already up to date.")
