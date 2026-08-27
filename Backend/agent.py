@@ -353,7 +353,7 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         - For fields with a known set of values (CardType, DocCurrency, etc.), use type="select"
           and populate options with the actual valid SAP values.
         - For CardType: options = [{value: "C", label: "Customer"}, {value: "S", label: "Vendor"}, {value: "L", label: "Lead"}].
-        - For currencies, use common ones: USD, EUR, INR, AED, GBP.
+        - For currencies, use common ones: INR, USD, EUR, AED, GBP. The default MUST be "INR" (Indian Rupee).
         - Always include DocDate (today) as a date field with a sensible default.
         - The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
         """
@@ -506,6 +506,7 @@ HOW TO ANSWER (STRICT RAG & GROUNDEDNESS RULES)
 7. Reply with 1–3 short sentences of executive insight based ONLY on the retrieved data. Use the `totals` the tool gives you.
 8. If the data is flagged `simulated: true`, state clearly that this is local sandbox data because the live HANA connection is unavailable.
 9. Be completely honest about data limits: if something is not in the ERP records retrieved, state that clearly.
+10. ALL monetary values in your conversational responses MUST be formatted using the Indian Rupee symbol (₹) and Indian numbering system (e.g., ₹1,50,000) instead of Dollars ($).
 
 Available entity shortcuts: {entities}
 """

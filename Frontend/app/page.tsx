@@ -1107,7 +1107,7 @@ export default function Page() {
                       style={{ animationDelay: '300ms', opacity: 0, animationFillMode: 'forwards' }}
                     >
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-white shadow-sm shadow-emerald-500/20">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-black shadow-sm shadow-emerald-500/20">
                           <BarChart3 size={14} />
                         </div>
                         <h3 className="font-bold text-gray-900 text-sm">Inventory Viz</h3>
@@ -1154,7 +1154,7 @@ export default function Page() {
                   <div className={`flex-1 flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start w-full'} w-full`}>
                     {message.role === 'assistant' && !message.content && !message.data && !message.error && isThinking && index === messages.length - 1 ? (
                       <div className="flex items-center h-8 pl-4 trail-text font-semibold text-sm mt-1 text-indigo-500">
-                        {Array.from("B1 IQ is thinking...").map((char, i) => (
+                        {Array.from("CIRA is thinking...").map((char, i) => (
                           <span
                             key={i}
                             className="inline-block"

@@ -94,6 +94,14 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
+/* ── Global Clickable Cursors ── */
+button, 
+a, 
+[role="button"],
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
 /* ── Metric Card Styling (Pastel Inspiration) ── */
 .metric-card-purple {
   background: var(--card-pastel-purple);
