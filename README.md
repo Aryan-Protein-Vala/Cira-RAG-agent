@@ -101,7 +101,7 @@ and known date/amount/party columns per table for automatic charting.
 |---|---|
 | A live SQL Server `sa` password, an RDP machine password and the HANA public IP were committed in `config.py` / `start_ssh_tunnel.bat` | No credential/hostname defaults anywhere; `start_ssh_tunnel.bat` reads git-ignored `tunnel.env` and prompts; **rotation still required** (§9.3) |
 | `auto` preferred MSSQL and **never tried HANA** unless a password happened to be set | Explicit enablement per source + `CIRA_DATA_SOURCE_ORDER` with HANA first; `CIRA_DATA_SOURCE=hana` fails loudly if unreachable |
-| `CIRA_ALLOW_ANY_EMPLOYEE=true` + `admin/asdfghjkl;` defaults | Both default off/empty; unknown company DBs rejected at sign-in; generic 401 with no user enumeration |
+| `CIRA_ALLOW_ANY_EMPLOYEE=true` plus a working `admin` password documented in the README and defaulted in `config.py` | Both default off/empty; unknown company DBs rejected at sign-in; generic 401 with no user enumeration |
 | `GET /sap/health` was public and dumped host/port/schema/user/Service-Layer URL (a test asserted otherwise and was failing on `main`) | Token required; payload reduced to booleans + counts; tests green |
 | `POST /sap/write` was callable by any session on any entity | Disabled unless `CIRA_SAP_WRITE_ENABLED`, admin-role only, entity allowlist, payload bounds, audited; sandbox refuses instead of faking success |
 | SQL guard was read-only but **not scoped** (`SELECT * FROM "SYS"."USERS"` passed) | `enforce_scope()` allowlists the company schema (+`HANA_EXTRA_SCHEMAS`) and catalog metadata views, rejects locking clauses |

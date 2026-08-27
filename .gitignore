@@ -23,7 +23,6 @@ tunnel.env
 *.db
 *.db-wal
 *.db-shm
-Backend/data/
 temp_cira_deploy/
 
 # ── Scratch / design drop-ins ────────────────────────────────────────────────
