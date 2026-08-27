@@ -102,6 +102,20 @@ class RenameRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class CompanyConnectionCreate(BaseModel):
+    company_db: str
+    hana_address: str
+    hana_port: int
+    hana_user: str
+    hana_password: str
+    service_layer_port: int = 50000
+
+
 class TitleRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000)
 
@@ -110,13 +124,24 @@ class TitleRequest(BaseModel):
 # Auth
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/auth/login")
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = authenticate(request.employee_id, request.password, request.company_db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid employee ID, password, or company DB.",
         )
+    
+    # Check multi-tenant connection
+    from database import CompanyConnection
+    result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == user["company_db"]))
+    conn = result.scalars().first()
+    if not conn:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Company database is not configured on this server.",
+        )
+        
     minted = create_token(user["employee_id"], user["name"], user["roles"], company_db=user["company_db"])
     return {
         "token": minted["token"],
@@ -137,7 +162,87 @@ async def me(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme))
         "name": ctx.get("name"),
         "roles": ctx.get("roles", []),
         "expires_at": ctx.get("exp"),
+        "company_db": ctx.get("company_db", ""),
     }
+
+
+async def set_tenant_context(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
+    ctx = validate_and_extract(credentials)
+    company_db = ctx.get("company_db")
+    if company_db:
+        from database import CompanyConnection
+        result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == company_db))
+        conn = result.scalars().first()
+        if conn:
+            import config
+            tenant_config = {
+                "HANA_SCHEMA": conn.company_db,
+                "SAP_B1_COMPANY_DB": conn.company_db,
+                "HANA_HOST": conn.hana_address,
+                "HANA_PORT": conn.hana_port,
+                "HANA_USER": conn.hana_user,
+                "HANA_PASSWORD": conn.hana_password,
+                "SAP_B1_HOST": conn.hana_address,
+                "SAP_B1_PORT": conn.service_layer_port,
+                "SAP_B1_USER": conn.hana_user,
+                "SAP_B1_PASSWORD": conn.hana_password,
+            }
+            config.CURRENT_TENANT.set(tenant_config)
+    return ctx
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Admin
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/admin/login")
+async def admin_login(request: AdminLoginRequest):
+    if request.username == "admin" and request.password == "asdfghjkl;":
+        minted = create_token("admin", "Administrator", ["admin"], company_db="")
+        return {"token": minted["token"]}
+    raise HTTPException(status_code=401, detail="Invalid admin credentials")
+
+
+@app.get("/admin/connections")
+async def get_connections(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
+    ctx = validate_and_extract(credentials)
+    if "admin" not in ctx.get("roles", []):
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    from database import CompanyConnection
+    result = await db.execute(select(CompanyConnection))
+    connections = result.scalars().all()
+    return [{"id": c.id, "company_db": c.company_db, "hana_address": c.hana_address, "hana_port": c.hana_port, "hana_user": c.hana_user, "service_layer_port": c.service_layer_port} for c in connections]
+
+
+@app.post("/admin/connections")
+async def create_connection(data: CompanyConnectionCreate, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
+    ctx = validate_and_extract(credentials)
+    if "admin" not in ctx.get("roles", []):
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    from database import CompanyConnection
+    # Check if exists
+    result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == data.company_db))
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Company DB already exists")
+        
+    conn = CompanyConnection(**data.dict())
+    db.add(conn)
+    await db.commit()
+    await db.refresh(conn)
+    return {"id": conn.id, "company_db": conn.company_db}
+
+
+@app.delete("/admin/connections/{id}")
+async def delete_connection(id: int, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
+    ctx = validate_and_extract(credentials)
+    if "admin" not in ctx.get("roles", []):
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    from database import CompanyConnection
+    await db.execute(delete(CompanyConnection).where(CompanyConnection.id == id))
+    await db.commit()
+    return {"ok": True}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -197,10 +302,9 @@ class WriteRequest(BaseModel):
 @app.post("/sap/write")
 async def sap_write(
     body: WriteRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    user_context: dict = Depends(set_tenant_context),
 ):
     """Create a new entity record in SAP Business One via the Service Layer."""
-    validate_and_extract(credentials)
     try:
         result = await sap.create_entity(body.entity, body.data)
         return {"ok": True, "result": result}
@@ -217,18 +321,16 @@ async def sap_health():
 async def sap_tables(
     pattern: str = "",
     limit: int = 300,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    user_context: dict = Depends(set_tenant_context),
 ):
-    validate_and_extract(credentials)
     return await sap.list_tables(pattern=pattern, limit=min(limit, 2000))
 
 
 @app.get("/sap/table/{table_name}")
 async def sap_table(
     table_name: str,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    user_context: dict = Depends(set_tenant_context),
 ):
-    validate_and_extract(credentials)
     try:
         return await sap.describe_table(table_name, sample_rows=3)
     except Exception as exc:
@@ -362,8 +464,8 @@ async def chat_endpoint(
     request: ChatRequest,
     http_request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    user_context: dict = Depends(set_tenant_context),
 ):
-    user_context = validate_and_extract(credentials)
     employee_id = user_context["employee_id"]
     sap_token = await exchange_for_sap_token(credentials.credentials, employee_id)
 
