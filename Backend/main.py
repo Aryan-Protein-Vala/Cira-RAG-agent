@@ -137,10 +137,23 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == user["company_db"]))
     conn = result.scalars().first()
     if not conn:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Company database is not configured on this server.",
-        )
+        # If it's the default company configured in .env, auto-register it
+        if user["company_db"] == config.SAP_B1_COMPANY_DB or not config.SAP_B1_COMPANY_DB:
+            conn = CompanyConnection(
+                company_db=user["company_db"],
+                hana_address=config.HANA_HOST or "127.0.0.1",
+                hana_port=config.HANA_PORT or 30013,
+                hana_user=config.HANA_USER or "SYSTEM",
+                hana_password=config.HANA_PASSWORD or "",
+                service_layer_port=config.SAP_B1_PORT or 50000,
+            )
+            db.add(conn)
+            await db.commit()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Company database is not configured on this server.",
+            )
         
     minted = create_token(user["employee_id"], user["name"], user["roles"], company_db=user["company_db"])
     return {

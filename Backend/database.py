@@ -90,6 +90,33 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _add_missing_columns()
+    await _seed_default_connection()
+
+
+async def _seed_default_connection() -> None:
+    """Seed the default tenant from .env if table is empty or missing it."""
+    try:
+        if not config.SAP_B1_COMPANY_DB:
+            return
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(CompanyConnection).where(
+                    CompanyConnection.company_db == config.SAP_B1_COMPANY_DB
+                )
+            )
+            if not result.scalars().first():
+                conn = CompanyConnection(
+                    company_db=config.SAP_B1_COMPANY_DB,
+                    hana_address=config.HANA_HOST or "127.0.0.1",
+                    hana_port=config.HANA_PORT or 30013,
+                    hana_user=config.HANA_USER or "SYSTEM",
+                    hana_password=config.HANA_PASSWORD or "",
+                    service_layer_port=config.SAP_B1_PORT or 50000,
+                )
+                session.add(conn)
+                await session.commit()
+    except Exception as exc:
+        pass
 
 
 async def _add_missing_columns() -> None:
