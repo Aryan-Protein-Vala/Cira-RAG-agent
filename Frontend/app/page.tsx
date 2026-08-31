@@ -114,12 +114,12 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
   }
 
   return (
-    <main className="min-h-screen w-full flex items-center justify-center p-4 bg-background relative overflow-hidden">
+    <main className="min-h-screen w-full flex items-center justify-center p-4 bg-[#f8fafc] relative overflow-hidden">
       {/* Background Decorative Gradient Orbs */}
       <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/10 filter blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-sky-500/10 filter blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md bg-card rounded-3xl p-8 shadow-2xl relative z-10 space-y-6">
+      <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl shadow-indigo-500/10 border border-gray-100 relative z-10 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative w-[50px] h-[50px] rounded-[18px] bg-[#f3b8b7] shadow-[5px_6px_11px_#bfbac1,-3px_-3px_9px_#fbf7f9] flex-shrink-0 animate-fly-in-left">
@@ -135,39 +135,39 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
               </div>
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-foreground tracking-tight">Cinntra / CIRA</h2>
-              <span className="text-[11px] font-bold text-indigo-500 tracking-wider uppercase">Enterprise Intelligence</span>
+              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Cinntra / CIRA</h2>
+              <span className="text-[11px] font-bold text-indigo-600 tracking-wider uppercase">Enterprise Intelligence</span>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
             v2.0
           </span>
         </div>
 
         <div>
-          <h1 className="text-2xl font-black text-foreground tracking-tight">
-            Ask your enterprise <span className="text-indigo-500">anything.</span>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            Ask your enterprise <span className="text-indigo-600">anything.</span>
           </h1>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             Secure natural-language intelligence for recruitment & SAP Business One data.
           </p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1.5">
               Employee ID
             </label>
             <input
               value={employee}
               onChange={(e) => setEmployee(e.target.value)}
               placeholder="e.g. EMP-20481"
-              className="w-full px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-foreground text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1.5">
               Password
             </label>
             <input
@@ -175,24 +175,24 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
-              className="w-full px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-foreground text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1.5">
               Company DB (Optional)
             </label>
             <input
               value={companyDb}
               onChange={(e) => setCompanyDb(e.target.value)}
-              placeholder="e.g. CLIENT_B_PROD"
-              className="w-full px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-foreground text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="e.g. CINNTRA_DEMO_NEW"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             />
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-medium flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium flex items-center gap-2">
               <AlertTriangle size={14} /> {error}
             </div>
           )}
@@ -206,8 +206,8 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
           </button>
         </form>
 
-        <div className="pt-2 border-t border-border/40 text-center">
-          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5 font-medium">
+        <div className="pt-2 border-t border-gray-100 text-center">
+          <span className="text-[11px] text-gray-500 inline-flex items-center gap-1.5 font-medium">
             <ShieldCheck size={13} className="text-emerald-500" /> Read-only enterprise ERP guardrails active
           </span>
         </div>
@@ -436,7 +436,7 @@ export default function Page() {
 
   // Initialize Theme and Auth
   useEffect(() => {
-    const savedTheme = (localStorage.getItem('cira-theme') as 'dark' | 'light') || 'dark'
+    const savedTheme = (localStorage.getItem('cira-theme') as 'dark' | 'light') || 'light'
     setTheme(savedTheme)
     document.documentElement.className = savedTheme
 
