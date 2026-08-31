@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: cira-backend
+    runtime: python
+    buildCommand: "pip install -r Backend/requirements.txt"
+    startCommand: "cd Backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: CIRA_DATA_SOURCE
+        value: simulator
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CIRA_ALLOW_ANY_EMPLOYEE
+        value: "true"
