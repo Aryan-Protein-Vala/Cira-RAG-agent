@@ -106,9 +106,8 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
       }
       const data = await res.json()
       onLogin(data.user, data.token)
-    } catch {
-      // Fallback demo login for offline/preview environments
-      onLogin({ employee_id: id, name: `User ${id}` }, 'demo-token-' + Date.now())
+    } catch (err) {
+      setError('Cannot connect to backend server. Make sure the backend is running on port 8000.')
     } finally {
       setBusy(false)
     }
