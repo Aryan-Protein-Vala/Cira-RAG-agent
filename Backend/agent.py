@@ -352,9 +352,15 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         - Include ONLY mandatory fields (required: true). Skip optional fields.
         - For fields with a known set of values (CardType, DocCurrency, etc.), use type="select"
           and populate options with the actual valid SAP values.
-        - For CardType: options = [{value: "C", label: "Customer"}, {value: "S", label: "Vendor"}, {value: "L", label: "Lead"}].
+        - For CardType (BusinessPartners): options = [{value: "C", label: "Customer"}, {value: "S", label: "Vendor"}, {value: "L", label: "Lead"}].
+        - For Sales Orders (Orders) & Invoices (Invoices), the mandatory fields are:
+            * CardCode (type: text, label: "Customer Code", required: true)
+            * DocDate (type: date, label: "Posting Date", required: true, default: today's date)
+            * DocDueDate (type: date, label: "Delivery / Due Date", required: true)
+            * ItemCode (type: text, label: "Item Code", required: true)
+            * Quantity (type: number, label: "Quantity", required: true, default: 1)
+            * BPLId (type: number, label: "Branch ID (BPLId)", required: false, default: 1, hint: "Branch ID (default 1 for main branch)")
         - For currencies, use common ones: INR, USD, EUR, AED, GBP. The default MUST be "INR" (Indian Rupee).
-        - Always include DocDate (today) as a date field with a sensible default.
         - The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
         """
         bus.push_form(FormPayload(

@@ -1,0 +1,77 @@
+{
+	"info": {
+		"_postman_id": "cira-sales-order-test",
+		"name": "CIRA SAP Sales Order & Mandatory Fields Test",
+		"description": "Tests for SAP Business One Sales Order (Orders) creation and querying BPL ID (Branches) and Numbering Series.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Create Sales Order (via CIRA Backend /sap/write)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"entity\": \"Orders\",\n  \"table\": \"ORDR\",\n  \"data\": {\n    \"CardCode\": \"C0041\",\n    \"DocDate\": \"2023-10-10\",\n    \"DocDueDate\": \"2023-10-17\",\n    \"BPL_IDAssignedToInvoice\": 1,\n    \"DocumentLines\": [\n      {\n        \"ItemCode\": \"ING00539\",\n        \"Quantity\": 1.0\n      }\n    ]\n  }\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8000/sap/write",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8000",
+					"path": [
+						"sap",
+						"write"
+					]
+				},
+				"description": "Submits a Sales Order with mandatory header and line fields into SAP Business One."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Create Sales Order (Direct SAP Service Layer /b1s/v1/Orders)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"CardCode\": \"C0041\",\n  \"DocDate\": \"2023-10-10\",\n  \"DocDueDate\": \"2023-10-17\",\n  \"BPL_IDAssignedToInvoice\": 1,\n  \"DocumentLines\": [\n    {\n      \"ItemCode\": \"ING00539\",\n      \"Quantity\": 1.0\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "https://20.20.45.237:50000/b1s/v1/Orders",
+					"protocol": "https",
+					"host": [
+						"20",
+						"20",
+						"45",
+						"237"
+					],
+					"port": "50000",
+					"path": [
+						"b1s",
+						"v1",
+						"Orders"
+					]
+				},
+				"description": "Directly posts to the SAP B1 Service Layer Orders endpoint."
+			},
+			"response": []
+		}
+	]
+}

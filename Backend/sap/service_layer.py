@@ -104,6 +104,18 @@ STATUS_ENUMS = {
     "O": "bost_Open", "C": "bost_Close", "Open": "bost_Open", "Closed": "bost_Close",
 }
 YESNO_ENUMS = {"Y": "tYES", "N": "tNO"}
+CARD_TYPE_MAP = {
+    "C": "cCustomer",
+    "CUSTOMER": "cCustomer",
+    "CCUSTOMER": "cCustomer",
+    "S": "cSupplier",
+    "VENDOR": "cSupplier",
+    "SUPPLIER": "cSupplier",
+    "CSUPPLIER": "cSupplier",
+    "L": "cLid",
+    "LEAD": "cLid",
+    "CLID": "cLid",
+}
 
 
 def map_field(table: str, column: str) -> str:
@@ -320,20 +332,6 @@ class ServiceLayerBackend(DataBackend):
         columns = list(rows[0].keys()) if rows else (select or [])
         return columns, rows
 
-CARD_TYPE_MAP = {
-    "C": "cCustomer",
-    "CUSTOMER": "cCustomer",
-    "CCUSTOMER": "cCustomer",
-    "S": "cSupplier",
-    "VENDOR": "cSupplier",
-    "SUPPLIER": "cSupplier",
-    "CSUPPLIER": "cSupplier",
-    "L": "cLid",
-    "LEAD": "cLid",
-    "CLID": "cLid",
-}
-
-
     def create_entity(self, table_or_entity: str, data: dict) -> dict:
         """Create a new entity in the SAP Service Layer."""
         entity = TABLE_TO_ENTITY.get(table_or_entity.upper(), table_or_entity)
@@ -349,6 +347,48 @@ CARD_TYPE_MAP = {
             elif target_key.lower() in ("documentstatus", "docstatus") and isinstance(v, str):
                 v = STATUS_ENUMS.get(v, STATUS_ENUMS.get(v.title(), v))
             clean_data[target_key] = v
+
+        # Auto-structure marketing documents (Orders, Invoices, Quotations, PurchaseOrders, etc.)
+        if entity in ("Orders", "Invoices", "Quotations", "PurchaseOrders", "DeliveryNotes", "CreditNotes"):
+            # Map branch ID field
+            for bpl_key in ("BPLId", "BPL_ID", "Branch", "BranchID", "bplid"):
+                if bpl_key in clean_data and "BPL_IDAssignedToInvoice" not in clean_data:
+                    val = clean_data.pop(bpl_key)
+                    try:
+                        clean_data["BPL_IDAssignedToInvoice"] = int(val)
+                    except (ValueError, TypeError):
+                        clean_data["BPL_IDAssignedToInvoice"] = val
+
+            # Map Series to integer if passed as string
+            if "Series" in clean_data:
+                try:
+                    clean_data["Series"] = int(clean_data["Series"])
+                except (ValueError, TypeError):
+                    pass
+
+            # Package flat line items into DocumentLines array if needed
+            if ("ItemCode" in clean_data or "Quantity" in clean_data) and "DocumentLines" not in clean_data:
+                line: dict[str, Any] = {}
+                if "ItemCode" in clean_data:
+                    line["ItemCode"] = str(clean_data.pop("ItemCode"))
+                if "Quantity" in clean_data:
+                    try:
+                        line["Quantity"] = float(clean_data.pop("Quantity"))
+                    except (ValueError, TypeError):
+                        line["Quantity"] = clean_data.pop("Quantity")
+                if "Price" in clean_data:
+                    try:
+                        line["Price"] = float(clean_data.pop("Price"))
+                    except (ValueError, TypeError):
+                        line["Price"] = clean_data.pop("Price")
+                if "UnitPrice" in clean_data:
+                    try:
+                        line["UnitPrice"] = float(clean_data.pop("UnitPrice"))
+                    except (ValueError, TypeError):
+                        line["UnitPrice"] = clean_data.pop("UnitPrice")
+                if "WarehouseCode" in clean_data:
+                    line["WarehouseCode"] = str(clean_data.pop("WarehouseCode"))
+                clean_data["DocumentLines"] = [line]
 
         return self._post(entity, clean_data)
 
