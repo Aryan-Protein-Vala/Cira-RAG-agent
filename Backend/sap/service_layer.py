@@ -320,10 +320,37 @@ class ServiceLayerBackend(DataBackend):
         columns = list(rows[0].keys()) if rows else (select or [])
         return columns, rows
 
+CARD_TYPE_MAP = {
+    "C": "cCustomer",
+    "CUSTOMER": "cCustomer",
+    "CCUSTOMER": "cCustomer",
+    "S": "cSupplier",
+    "VENDOR": "cSupplier",
+    "SUPPLIER": "cSupplier",
+    "CSUPPLIER": "cSupplier",
+    "L": "cLid",
+    "LEAD": "cLid",
+    "CLID": "cLid",
+}
+
+
     def create_entity(self, table_or_entity: str, data: dict) -> dict:
         """Create a new entity in the SAP Service Layer."""
         entity = TABLE_TO_ENTITY.get(table_or_entity.upper(), table_or_entity)
-        return self._post(entity, data)
+        table = ENTITY_TO_TABLE.get(entity, table_or_entity.upper())
+
+        clean_data: dict[str, Any] = {}
+        for k, v in data.items():
+            if v is None or v == "":
+                continue
+            target_key = FIELD_MAP.get(table, {}).get(k) or FIELD_MAP.get("*", {}).get(k) or k
+            if target_key.lower() == "cardtype" and isinstance(v, str):
+                v = CARD_TYPE_MAP.get(v.upper(), v)
+            elif target_key.lower() in ("documentstatus", "docstatus") and isinstance(v, str):
+                v = STATUS_ENUMS.get(v, STATUS_ENUMS.get(v.title(), v))
+            clean_data[target_key] = v
+
+        return self._post(entity, clean_data)
 
 
 def _odata_clause(field: str, op: str, value: Any) -> str:

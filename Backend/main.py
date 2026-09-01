@@ -630,8 +630,15 @@ async def generate_title_endpoint(
     request: TitleRequest,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
-    validate_and_extract(credentials)
-    return {"title": await agent_generate_title(request.prompt)}
+    try:
+        validate_and_extract(credentials)
+    except Exception:
+        pass
+    try:
+        return {"title": await agent_generate_title(request.prompt)}
+    except Exception:
+        words = (request.prompt or "").strip().split()
+        return {"title": " ".join(words[:4])[:40] or "New conversation"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

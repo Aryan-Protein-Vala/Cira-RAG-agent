@@ -27,14 +27,47 @@ interface DynamicFormCardProps {
   onSuccess?: () => void;
 }
 
+const normalizeOptions = (options: any): { value: string; label: string }[] => {
+  if (!options) return [];
+  if (Array.isArray(options)) {
+    return options.map((opt) => {
+      if (typeof opt === 'string' || typeof opt === 'number') {
+        const str = String(opt);
+        if (str.toUpperCase() === 'C') return { value: 'C', label: 'Customer' };
+        if (str.toUpperCase() === 'S') return { value: 'S', label: 'Vendor' };
+        if (str.toUpperCase() === 'L') return { value: 'L', label: 'Lead' };
+        return { value: str, label: str };
+      }
+      if (typeof opt === 'object' && opt !== null) {
+        const val = opt.value ?? opt.code ?? opt.key ?? opt.id ?? opt.name ?? opt.label ?? '';
+        const lbl = opt.label ?? opt.name ?? opt.description ?? opt.title ?? opt.value ?? val;
+        return { value: String(val), label: String(lbl) };
+      }
+      return { value: String(opt), label: String(opt) };
+    });
+  }
+  if (typeof options === 'object') {
+    return Object.entries(options).map(([k, v]) => ({
+      value: String(k),
+      label: typeof v === 'string' ? v : String(v),
+    }));
+  }
+  return [];
+};
+
 export function DynamicFormCard({ payload, token, messageKey, onSuccess }: DynamicFormCardProps) {
   const [formData, setFormData] = useState<Record<string, any>>(() => {
     const initial: Record<string, any> = {};
-    for (const field of payload.fields) {
-      if (field.default !== undefined) {
+    for (const field of payload.fields || []) {
+      if (field.default !== undefined && field.default !== null && field.default !== '') {
         initial[field.name] = field.default;
       } else if (field.type === 'date') {
         initial[field.name] = new Date().toISOString().split('T')[0];
+      } else if (field.type === 'select') {
+        const opts = normalizeOptions(field.options);
+        if (opts.length > 0) {
+          initial[field.name] = opts[0].value;
+        }
       }
     }
     return initial;
@@ -125,48 +158,48 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
       </div>
       
       <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5 bg-white">
-        {payload.fields.map((field) => (
-          <div key={field.name} className="flex flex-col gap-1.5">
-            <label htmlFor={field.name} className="text-gray-500 text-[11px] uppercase tracking-wider font-extrabold">
-              {field.label} {field.required && <span className="text-indigo-500">*</span>}
-            </label>
-            
-            {field.type === 'select' ? (
-              <select
-                id={field.name}
-                required={field.required}
-                value={formData[field.name] || ''}
-                onChange={(e) => handleChange(field.name, e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-gray-300"
-              >
-                <option value="" disabled>Select {field.label}...</option>
-                {(Array.isArray(field.options) 
-                  ? field.options 
-                  : (typeof field.options === 'object' && field.options !== null)
-                    ? Object.entries(field.options).map(([k, v]) => ({ value: k, label: typeof v === 'string' ? v : String(v) }))
-                    : []
-                ).map((opt: any) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label} ({opt.value})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={field.name}
-                type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                required={field.required}
-                value={formData[field.name] || ''}
-                onChange={(e) => handleChange(field.name, field.type === 'number' ? parseFloat(e.target.value) : e.target.value)}
-                placeholder={`Enter ${field.label}...`}
-                className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-gray-300 placeholder:text-gray-400"
-              />
-            )}
-            {field.hint && (
-              <span className="text-gray-500 text-[10px] pl-1 font-medium">{field.hint}</span>
-            )}
-          </div>
-        ))}
+        {(payload.fields || []).map((field) => {
+          const isReq = Boolean(field.required && String(field.required) !== 'false');
+          const optionsList = field.type === 'select' ? normalizeOptions(field.options) : [];
+
+          return (
+            <div key={field.name} className="flex flex-col gap-1.5">
+              <label htmlFor={field.name} className="text-gray-500 text-[11px] uppercase tracking-wider font-extrabold">
+                {field.label} {isReq && <span className="text-indigo-500">*</span>}
+              </label>
+              
+              {field.type === 'select' ? (
+                <select
+                  id={field.name}
+                  required={isReq}
+                  value={formData[field.name] ?? ''}
+                  onChange={(e) => handleChange(field.name, e.target.value)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-gray-300"
+                >
+                  <option value="" disabled>Select {field.label}...</option>
+                  {optionsList.map((opt, i) => (
+                    <option key={`${opt.value}-${i}`} value={opt.value}>
+                      {opt.label}{opt.label !== opt.value && !opt.label.includes(`(${opt.value})`) ? ` (${opt.value})` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id={field.name}
+                  type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                  required={isReq}
+                  value={formData[field.name] ?? ''}
+                  onChange={(e) => handleChange(field.name, field.type === 'number' ? parseFloat(e.target.value) : e.target.value)}
+                  placeholder={`Enter ${field.label}...`}
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-gray-300 placeholder:text-gray-400"
+                />
+              )}
+              {field.hint && (
+                <span className="text-gray-500 text-[10px] pl-1 font-medium">{field.hint}</span>
+              )}
+            </div>
+          );
+        })}
 
         {error && (
           <div className="col-span-1 md:col-span-2 bg-rose-50 border border-rose-200 text-rose-600 p-4 rounded-xl flex items-start gap-3 text-xs mt-2 shadow-sm font-semibold">
