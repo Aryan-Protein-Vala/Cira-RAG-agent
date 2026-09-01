@@ -1,0 +1,433 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* ── Light Mode Tokens ── */
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --popover: #ffffff;
+    --popover-foreground: #0f172a;
+    --primary: #4f46e5;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f9;
+    --secondary-foreground: #0f172a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --accent: #e0e7ff;
+    --accent-foreground: #3730a3;
+    --destructive: #f43f5e;
+    --destructive-foreground: #ffffff;
+    --border: #e2e8f0;
+    --input: #f1f5f9;
+    --ring: rgba(99, 102, 241, 0.4);
+
+    /* ── Pastel Surfaces (Light Mode) ── */
+    --card-pastel-purple: #ebdff8;
+    --card-pastel-blue: #cce3fa;
+    --card-pastel-rose: #fbb3bc;
+    --card-pastel-mint: #c0e8d8;
+    --card-pastel-amber: #fef08a;
+
+    --sidebar-bg: #ffffff;
+    --rail-bg: #ffffff;
+  }
+
+  .dark {
+    /* ── Dark Mode Tokens (Obsidian Slate + Glowing Pastels) ── */
+    --background: #0b0f19;
+    --foreground: #f8fafc;
+    --card: #131b2e;
+    --card-foreground: #f8fafc;
+    --popover: #162035;
+    --popover-foreground: #f8fafc;
+    --primary: #6366f1;
+    --primary-foreground: #ffffff;
+    --secondary: #1e293b;
+    --secondary-foreground: #f8fafc;
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+    --accent: #2e3856;
+    --accent-foreground: #c7d2fe;
+    --destructive: #fb7185;
+    --destructive-foreground: #ffffff;
+    --border: rgba(255, 255, 255, 0.08);
+    --input: #162035;
+    --ring: rgba(129, 140, 248, 0.5);
+
+    /* ── Pastel Surfaces (Dark Mode Glass / Glow) ── */
+    --card-pastel-purple: rgba(99, 102, 241, 0.14);
+    --card-pastel-blue: rgba(56, 189, 248, 0.14);
+    --card-pastel-rose: rgba(251, 113, 133, 0.14);
+    --card-pastel-mint: rgba(52, 211, 153, 0.14);
+    --card-pastel-amber: rgba(251, 191, 36, 0.14);
+
+    --sidebar-bg: #0f172a;
+    --rail-bg: #0f172a;
+  }
+}
+
+/* ── Reset & Base Styles ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Typography Enhancements ── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', var(--font-sans);
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+/* ── Global Clickable Cursors ── */
+button, 
+a, 
+[role="button"],
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* ── Metric Card Styling (Pastel Inspiration) ── */
+.metric-card-purple {
+  background: var(--card-pastel-purple);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+}
+.metric-card-blue {
+  background: var(--card-pastel-blue);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+.metric-card-rose {
+  background: var(--card-pastel-rose);
+  border: 1px solid rgba(251, 113, 133, 0.25);
+}
+.metric-card-mint {
+  background: var(--card-pastel-mint);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+
+/* ── Chat Bubbles with Pastel Colors & White/Crisp Text ── */
+.chat-bubble-user {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #ffffff;
+  border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+}
+
+.chat-bubble-assistant {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.dark .chat-bubble-assistant {
+  background: #151e33;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Markdown Output inside Assistant Bubble ── */
+.chat-markdown {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.chat-markdown p {
+  margin-bottom: 0.6rem;
+}
+.chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+.chat-markdown ul, .chat-markdown ol {
+  margin-left: 1.25rem;
+  margin-bottom: 0.6rem;
+}
+.chat-markdown li {
+  margin-bottom: 0.25rem;
+}
+.chat-markdown code {
+  font-family: var(--font-mono);
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.35rem;
+  font-size: 0.8rem;
+}
+.chat-markdown strong {
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* ── Robot Mascot Animations ── */
+@keyframes robotFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(1deg);
+  }
+}
+
+@keyframes robotThink {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  25% {
+    transform: translateY(-4px) scale(1.03) rotate(-1.5deg);
+  }
+  75% {
+    transform: translateY(2px) scale(0.98) rotate(1.5deg);
+  }
+}
+
+@keyframes robotWaveArm {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-25deg);
+  }
+  50% {
+    transform: rotate(-10deg);
+  }
+  75% {
+    transform: rotate(-30deg);
+  }
+}
+
+@keyframes robotBusyHands {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes robotBusyHandsAlt {
+  0%, 100% {
+    transform: translateY(-5px);
+  }
+  50% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-robot-float {
+  animation: robotFloat 3.6s ease-in-out infinite;
+}
+
+.animate-robot-think {
+  animation: robotThink 1.2s ease-in-out infinite;
+}
+
+.animate-robot-wave {
+  animation: robotWaveArm 0.8s ease-in-out infinite;
+}
+
+.animate-robot-hands-busy {
+  animation: robotBusyHands 0.5s ease-in-out infinite;
+}
+
+.animate-robot-hands-busy-alt {
+  animation: robotBusyHandsAlt 0.5s ease-in-out infinite;
+}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ── Keyframe Animations ── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes chatBubbleIn {
+  0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+  60% { opacity: 1; transform: scale(1.02) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.animate-chat-bubble {
+  animation: chatBubbleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes robotDance {
+  0% { transform: translateY(0px) rotate(0deg) scale(1); }
+  25% { transform: translateY(-15px) rotate(-10deg) scale(1.05); }
+  50% { transform: translateY(0px) rotate(0deg) scale(1); }
+  75% { transform: translateY(-15px) rotate(10deg) scale(1.05); }
+  100% { transform: translateY(0px) rotate(0deg) scale(1); }
+}
+
+.animate-robot-dance {
+  animation: robotDance 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ROBOT DOCK (v0.dev)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.robot-dock { position: fixed; right: 30px; bottom: 84px; z-index: 50; touch-action: none; }
+.robot { position: relative; width: 66px; height: 66px; border: 0; border-radius: 24px; background: #f3b8b7; box-shadow: 7px 8px 15px #bfbac1, -5px -5px 13px #fbf7f9; animation: float 3.2s ease-in-out infinite; cursor: pointer; transition: transform .2s, box-shadow .2s; }
+.robot:active { transform: translateY(2px); box-shadow: 2px 3px 5px #b9b5c0; }
+.antenna { position: absolute; left: 31px; top: -12px; width: 3px; height: 14px; background: #6f7ea8; }
+.antenna:after { content: ''; position: absolute; top: -4px; left: -3px; width: 9px; height: 9px; border-radius: 50%; background: #7ea4ee; }
+.robot-face { position: absolute; top: 15px; left: 10px; width: 46px; height: 29px; border-radius: 12px; background: #e8edf7; display: flex; justify-content: space-evenly; align-items: center; box-shadow: inset 2px 2px 4px #c1c7d4; }
+.robot-face i { width: 7px; height: 7px; border-radius: 50%; background: #526793; }
+.robot-body { position: absolute; left: 17px; bottom: 8px; display: flex; gap: 5px; }
+.robot-body b { width: 7px; height: 5px; border-radius: 5px; background: #7384b0; }
+.robot-bubble { position: absolute; right: 0; bottom: 78px; width: 190px; padding: 12px 14px; border-radius: 14px; background: #f5f1f2; box-shadow: 6px 7px 14px #c4c0c6; color: #626477; font-size: 11px; line-height: 1.5; opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s; }
+.robot-bubble.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+@keyframes float { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(2deg); } }
+
+/* Robot Expressions */
+.robot-face i { transition: all 0.2s; }
+.robot-face.blink i { height: 2px; border-radius: 2px; }
+.robot-face.blush i { height: 3px; border-radius: 4px; margin-top: -2px; }
+.robot-face.blush::before, .robot-face.blush::after {
+  content: ''; position: absolute; width: 6px; height: 3px;
+  background: #f3b8b7; border-radius: 50%; filter: blur(1px); top: 18px;
+}
+.robot-face.blush::before { left: 8px; }
+.robot-face.blush::after { right: 8px; }
+.robot-face.surprised i { height: 8px; width: 5px; border-radius: 50%; }
+.robot-face.surprised { box-shadow: inset 2px 4px 6px #c1c7d4; }
+.robot-face.squint i { height: 2px; border-radius: 1px; width: 8px; }
+.robot-face.joy i { height: 4px; width: 8px; border-radius: 50% 50% 0 0; margin-top: -2px; }
+
+/* Chibi Robot Avatar */
+.chibi-robot { position: relative; width: 34px; height: 34px; flex-shrink: 0; border-radius: 12px; background: var(--card-pastel-blue); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,0.08); transition: all 0.3s; animation: chibi-float 3.2s ease-in-out infinite; }
+.chibi-robot.speaking { animation: speaking-pulse 0.8s infinite alternate, chibi-float 3.2s ease-in-out infinite; }
+.chibi-robot:hover { cursor: pointer; }
+.chibi-robot .antenna-mini { position: absolute; left: 16px; top: -6px; width: 2px; height: 8px; background: #6f7ea8; }
+.chibi-robot .antenna-mini:after { content: ''; position: absolute; top: -3px; left: -2px; width: 6px; height: 6px; border-radius: 50%; background: #7ea4ee; }
+.chibi-robot.speaking .antenna-mini:after { background: #b2f5d9; box-shadow: 0 0 6px #b2f5d9; }
+.robot-face-mini { position: absolute; top: 8px; left: 5px; width: 24px; height: 16px; border-radius: 6px; background: #fff; display: flex; justify-content: space-evenly; align-items: center; box-shadow: inset 1px 1px 2px #c1c7d4; }
+.robot-face-mini i { width: 4px; height: 4px; border-radius: 50%; background: #526793; transition: all 0.2s; }
+.chibi-robot:hover .robot-face-mini i { width: 6px; height: 3px; border-radius: 50% 50% 0 0; margin-top: -1px; }
+.robot-body-mini { position: absolute; left: 9px; bottom: 4px; display: flex; gap: 3px; }
+.robot-body-mini b { width: 4px; height: 3px; border-radius: 3px; background: #7384b0; }
+
+/* User Avatar */
+.user-avatar-circle { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, var(--card-pastel-blue), var(--card-pastel-purple)); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,0.08); animation: chibi-float 3.2s ease-in-out infinite; }
+.user-animal { font-size: 18px; display: inline-block; }
+
+@keyframes chibi-bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
+@keyframes speaking-pulse { 0% { transform: translateY(-1px) scale(1); } 100% { transform: translateY(-2px) scale(1.08); } }
+@keyframes chibi-float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1deg); } }
+
+/* Entrance Animations */
+@keyframes flyInLeft {
+  0% { opacity: 0; transform: translateX(-200px) rotate(-15deg); }
+  60% { opacity: 1; transform: translateX(20px) rotate(5deg); }
+  100% { opacity: 1; transform: translateX(0) rotate(0deg); }
+}
+.animate-fly-in-left {
+  opacity: 0;
+  animation: flyInLeft 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes flyInRight {
+  0% { opacity: 0; transform: translateX(200px) rotate(15deg); }
+  60% { opacity: 1; transform: translateX(-20px) rotate(-5deg); }
+  100% { opacity: 1; transform: translateX(0) rotate(0deg); }
+}
+.animate-fly-in-right {
+  opacity: 0;
+  animation: flyInRight 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes flyInBottom {
+  0% { opacity: 0; transform: translateY(200px) scale(0.8); }
+  60% { opacity: 1; transform: translateY(-20px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-fly-in-bottom {
+  opacity: 0;
+  animation: flyInBottom 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes flyInTop {
+  0% { opacity: 0; transform: translateY(-200px) scale(0.8); }
+  60% { opacity: 1; transform: translateY(20px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-fly-in-top {
+  opacity: 0;
+  animation: flyInTop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes trail {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translateY(2px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.1);
+  }
+}
