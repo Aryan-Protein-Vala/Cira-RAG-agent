@@ -3,27 +3,45 @@ import openpyxl
 from io import BytesIO
 import re
 from typing import List, Dict, Any
-from auth import require_role
+from admin_routes import require_role
 
 router = APIRouter(prefix="/admin/migration", tags=["Migration"])
+
+import difflib
 
 # Very simple fuzzy mapping alias dictionary
 # Target field -> Common aliases
 BP_ALIASES = {
-    "CardCode": ["customer code", "vendor code", "bp code", "id", "cardcode", "code"],
-    "CardName": ["customer name", "vendor name", "bp name", "name", "cardname", "khata", "ग्राहक नाम"],
-    "CardType": ["type", "bp type", "cardtype", "role", "customer/vendor"],
-    "Phone1": ["phone", "mobile", "contact number", "phone1", "tel"],
-    "E_Mail": ["email", "e-mail", "email id"],
-    "Cellular": ["cellular", "mobile 2"],
-    "VatIdUnCmp": ["gstin", "gst", "tax id", "pan"]
+    "CardCode": ["customer code", "vendor code", "bp code", "id", "cardcode", "code", "customer id", "vendor id"],
+    "CardName": ["customer name", "vendor name", "bp name", "name", "cardname", "khata", "ग्राहक नाम", "company name"],
+    "CardType": ["type", "bp type", "cardtype", "role", "customer/vendor", "category"],
+    "Phone1": ["phone", "mobile", "contact number", "phone1", "tel", "telephone", "contact"],
+    "E_Mail": ["email", "e-mail", "email id", "mail", "email address"],
+    "Cellular": ["cellular", "mobile 2", "alt phone"],
+    "VatIdUnCmp": ["gstin", "gst", "tax id", "pan", "vat", "tax number"]
 }
 
 def _fuzzy_match_header(header: str) -> str:
     h = header.lower().strip()
+    
+    # 1. Exact alias match
     for target, aliases in BP_ALIASES.items():
         if h in [a.lower() for a in aliases]:
             return target
+            
+    # 2. Fuzzy alias match using difflib
+    all_aliases = []
+    alias_to_target = {}
+    for target, aliases in BP_ALIASES.items():
+        for a in aliases:
+            a_lower = a.lower()
+            all_aliases.append(a_lower)
+            alias_to_target[a_lower] = target
+            
+    matches = difflib.get_close_matches(h, all_aliases, n=1, cutoff=0.75)
+    if matches:
+        return alias_to_target[matches[0]]
+        
     return header # No match
 
 @router.post("/upload")

@@ -1,41 +1,41 @@
 import asyncio
 import uuid
-from passlib.context import CryptContext
-from database import AsyncSessionLocal, SuperAdmin, Partner, init_db
 from sqlalchemy import select
+from database import AsyncSessionLocal, SuperAdmin, Partner
+from admin_routes import get_password_hash
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-async def main():
-    await init_db()
+async def create_users():
     async with AsyncSessionLocal() as session:
         # Create SuperAdmin
-        admin_email = "aryansharma24112003@gmail.com"
-        result = await session.execute(select(SuperAdmin).where(SuperAdmin.email == admin_email))
+        sa_email = "aryansharma24112003@gmail.com"
+        result = await session.execute(select(SuperAdmin).where(SuperAdmin.email == sa_email))
         if not result.scalars().first():
-            admin = SuperAdmin(
+            sa = SuperAdmin(
                 id=str(uuid.uuid4()),
-                email=admin_email,
-                password_hash=pwd_context.hash("aryan")
+                email=sa_email,
+                password_hash=get_password_hash("aryan")
             )
-            session.add(admin)
-            print(f"Created SuperAdmin: {admin_email}")
+            session.add(sa)
+            print(f"SuperAdmin {sa_email} created.")
 
         # Create Partner Admin
-        partner_email = "partner@cira.app"
-        result = await session.execute(select(Partner).where(Partner.email == partner_email))
+        pa_email = "admin@partner.com"
+        result = await session.execute(select(Partner).where(Partner.email == pa_email))
         if not result.scalars().first():
-            partner = Partner(
+            pa = Partner(
                 id=str(uuid.uuid4()),
-                name="Mock Partner",
-                email=partner_email,
-                password_hash=pwd_context.hash("partner123"),
-                slug="mockpartner"
+                name="Test Partner",
+                slug="test-partner",
+                email=pa_email,
+                password_hash=get_password_hash("aryan"),
+                brand_name="B1 Copilot Partner",
+                is_active=1
             )
-            session.add(partner)
-            print(f"Created Partner: {partner_email} (password: partner123)")
-            
+            session.add(pa)
+            print(f"Partner Admin {pa_email} created.")
+
         await session.commit()
+        print("Done.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(create_users())

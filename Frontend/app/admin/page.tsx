@@ -191,6 +191,9 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <a href="/admin/migration" className="flex items-center gap-2 bg-[#F3F2EA] text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#E8E6DB] transition-colors cursor-pointer border border-[#E8E6DB]">
+              Data Migration
+            </a>
             <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700 shadow-sm transition-colors cursor-pointer">
               <Plus size={16} /> Add Tenant
             </button>
