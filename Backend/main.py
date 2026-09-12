@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title="CIRA Chat Backend", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="B1 Copilot Backend", version="2.0.0", lifespan=lifespan)
 
 cors_kwargs = {
     "allow_credentials": True,
@@ -137,7 +137,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         p_res = await db.execute(select(Partner).where(Partner.id == tenant_row.partner_id))
         partner = p_res.scalars().first()
         if partner:
-            brand_name = partner.brand_name or "CIRA"
+            brand_name = partner.brand_name or "B1 Copilot"
             logo_url = partner.logo_url or ""
     else:
         result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == user["company_db"]))

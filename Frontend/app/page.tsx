@@ -129,7 +129,7 @@ function LoginScreen({ onLogin, brandName, logoUrl }: { onLogin: (user: any, tok
               )}
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">{brandName || 'AI Agent Login'}</h2>
+              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">{brandName || 'B1 Copilot'}</h2>
               <span className="text-[11px] font-bold text-indigo-600 tracking-wider uppercase">Enterprise Intelligence</span>
             </div>
           </div>
@@ -335,7 +335,7 @@ export default function Page() {
   const [profileName, setProfileName] = useState('User')
   const [profileDept, setProfileDept] = useState('Recruitment Operations')
   const [profileRole, setProfileRole] = useState('ADMIN')
-  const [brandName, setBrandName] = useState('CIRA')
+  const [brandName, setBrandName] = useState('B1 Copilot')
   const [logoUrl, setLogoUrl] = useState('')
 
   // UI Views: 'chat'

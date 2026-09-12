@@ -35,7 +35,7 @@ def check_port(port):
             s.bind(("0.0.0.0", port))
             print_pass(f"Port {port} is available.")
         except OSError:
-            print_fail(f"Port {port} is already in use. Please free this port before starting CIRA.")
+            print_fail(f"Port {port} is already in use. Please free this port before starting B1 Copilot.")
 
 def check_env():
     if not os.path.exists("Backend/.env") and not os.getenv("OPENROUTER_API_KEY"):
@@ -52,7 +52,7 @@ def check_docker():
 
 def main():
     print("="*50)
-    print("  CIRA Doctor - Environment Validation Tool")
+    print("  B1 Copilot Doctor - Environment Validation Tool")
     print("="*50)
     print("")
     
@@ -73,7 +73,7 @@ def main():
     
     print("")
     print("="*50)
-    print("\033[92mAll critical checks passed! CIRA is ready to be installed.\033[0m")
+    print("\033[92mAll critical checks passed! B1 Copilot is ready to be installed.\033[0m")
     print("Run \033[96mdocker-compose up -d\033[0m to deploy the application.")
     print("="*50)
 

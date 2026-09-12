@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'CIRA — Enterprise Intelligence Control Center',
+  title: 'B1 Copilot — Enterprise Intelligence Control Center',
   description: 'Securely query enterprise and SAP Business One data with AI natural language intelligence.',
   generator: 'v0.app',
   icons: {
