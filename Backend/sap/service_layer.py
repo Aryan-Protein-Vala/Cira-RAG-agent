@@ -133,8 +133,11 @@ def normalize_write_payload(table_or_entity: str, data: dict) -> dict:
     table = ENTITY_TO_TABLE.get(table_or_entity, table_or_entity).upper()
     entity = TABLE_TO_ENTITY.get(table, table_or_entity)
 
-    # Fields that belong only to transactional documents (Orders, Invoices, etc.)
-    # and must NEVER be sent for master-data entities like BusinessPartners or Items.
+    DOCUMENT_ENTITIES = {
+        "Orders", "Invoices", "PurchaseOrders", "Quotations", "CreditNotes",
+        "PurchaseQuotations", "PurchaseInvoices", "DeliveryNotes", "Returns",
+        "PurchaseDeliveryNotes", "PurchaseCreditNotes", "Drafts"
+    }
     DOCUMENT_ONLY_FIELDS = {"DocDate", "DocDueDate", "DocTotal", "DocStatus",
                             "DocumentStatus", "DocCurrency", "DocCur", "TaxDate",
                             "ShipDate", "Confirmed", "PickStatus"}
@@ -153,22 +156,33 @@ def normalize_write_payload(table_or_entity: str, data: dict) -> dict:
             log.debug("normalize_write_payload: dropping document-only field %r for entity %s", k, entity)
             continue
 
+        # Drop master-data-only fields when writing to transactional documents/drafts
+        if entity in DOCUMENT_ENTITIES and k in ("CardType", "DocTotal", "DocStatus", "DocumentStatus"):
+            continue
+
         field = map_field(table, k)
 
-        # 1. Date normalization: convert MM/DD/YYYY (or DD/MM/YYYY) to ISO YYYY-MM-DD
-        if isinstance(v, str):
-            d_match = re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$", v.strip())
-            if d_match:
-                p1, p2, year = d_match.groups()
-                n1, n2 = int(p1), int(p2)
-                if n1 > 12 and n2 <= 12:  # Fallback if first part > 12 (DD/MM/YYYY)
-                    month, day = p2, p1
-                else:  # Standard SAP MM/DD/YYYY
-                    month, day = p1, p2
-                v = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        # 1. Date normalization: convert ISO or formatted dates to ISO YYYY-MM-DD
+        is_date_field = any(d in k.lower() for d in ("date", "time"))
+        if isinstance(v, str) and (is_date_field or re.match(r"^\d{4}-\d{2}-\d{2}", v.strip())):
+            v_clean = v.strip()
+            if "T" in v_clean and re.match(r"^\d{4}-\d{2}-\d{2}T", v_clean):
+                v = v_clean.split("T")[0]
+            elif not re.match(r"^\d{4}-\d{2}-\d{2}$", v_clean):
+                d_match = re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$", v_clean)
+                if d_match:
+                    p1, p2, year = d_match.groups()
+                    tenant = config.CURRENT_TENANT.get() or {}
+                    loc = str(tenant.get("locale", "en-IN")).lower()
+                    # Indian / UK / European formats use DD/MM/YYYY
+                    if "in" in loc or "gb" in loc or "eu" in loc or int(p1) > 12:
+                        day, month = p1, p2
+                    else:
+                        month, day = p1, p2
+                    v = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
 
         # 2. CardType enum normalization for BusinessPartners
-        if field == "CardType" and isinstance(v, str):
+        if field == "CardType" and isinstance(v, str) and entity not in DOCUMENT_ENTITIES:
             v = CARD_TYPE_ENUMS.get(v, CARD_TYPE_ENUMS.get(v.strip(), v))
 
         # 3. DocumentStatus enum normalization
@@ -176,7 +190,7 @@ def normalize_write_payload(table_or_entity: str, data: dict) -> dict:
             v = STATUS_ENUMS.get(v, STATUS_ENUMS.get(v.title(), v))
 
         # 4. Boolean / YesNo flags
-        if field in ("Cancelled", "Valid", "Active", "Frozen", "validFor"):
+        if field in ("Cancelled", "Valid", "Active", "Frozen", "validFor", "Confirmed", "DeferredTax", "PartialDelivery"):
             if isinstance(v, bool):
                 v = "tYES" if v else "tNO"
             elif isinstance(v, str) and v in YESNO_ENUMS:
@@ -442,6 +456,7 @@ class ServiceLayerBackend(DataBackend):
         "VendorPayments": "46",
         "JournalEntries": "30",
         "SalesOpportunities": "97",
+        "PurchaseQuotations": "540660006",
     }
 
     def _get_primary_series(self, entity: str) -> int | None:
@@ -472,12 +487,25 @@ class ServiceLayerBackend(DataBackend):
 
         # ── Line Items Transformation for Documents ──
         # If the flat form passed ItemCode/Quantity/UnitPrice/TaxCode, move them into DocumentLines
-        if entity in ("Orders", "Invoices", "PurchaseOrders", "Quotations"):
+        # Must execute before entity name is updated to "Drafts"
+        DOCUMENT_ENTITIES = {
+            "Orders", "Invoices", "PurchaseOrders", "Quotations", "CreditNotes",
+            "PurchaseQuotations", "PurchaseInvoices", "DeliveryNotes", "Returns",
+            "PurchaseDeliveryNotes", "PurchaseCreditNotes"
+        }
+        DRAFTABLE = set(DOCUMENT_ENTITIES)
+        is_draft = entity in DRAFTABLE or entity == "Drafts"
+
+        if entity in DOCUMENT_ENTITIES or is_draft:
             item_code = payload.pop("ItemCode", None)
             quantity = payload.pop("Quantity", None)
             unit_price = payload.pop("UnitPrice", None)
             tax_code = payload.pop("TaxCode", None)
             
+            # Remove read-only document fields if present
+            for ro_field in ("DocTotal", "DocStatus", "DocumentStatus", "DocEntry", "DocNum", "CardType"):
+                payload.pop(ro_field, None)
+
             # Use existing DocumentLines if provided, else create it
             if "DocumentLines" not in payload:
                 payload["DocumentLines"] = []
@@ -494,19 +522,26 @@ class ServiceLayerBackend(DataBackend):
                 payload["DocumentLines"].append(line)
 
         # ── Numbering Series Injection ──
-        if "Series" not in payload:
+        if is_draft:
+            # For Drafts, omit Series so SAP B1 automatically applies the default Draft Series (ObjectCode 112)
+            # Injecting the target document's series into /b1s/v1/Drafts causes SAP error -5002
+            payload.pop("Series", None)
+        elif "Series" not in payload:
             series = self._get_primary_series(entity)
             if series is not None:
                 payload["Series"] = series
                 log.debug("Auto-injected Series=%s for entity %s", series, entity)
             else:
-                # If no auto-series was found, but this is a Master Data record (which often
-                # uses manual keys like CardCode/ItemCode), we must supply Series = -1
-                # to tell SAP this is a manually numbered record. Otherwise we get -4002.
                 MASTER_DATA = {"BusinessPartners", "Items", "ItemGroups", "Warehouses"}
                 if entity in MASTER_DATA:
                     payload["Series"] = -1
                     log.debug("Auto-injected Series=-1 (Manual) for Master Data %s", entity)
+
+        # ── Draft-First Writes ──
+        if is_draft and entity != "Drafts":
+            payload["DocObjectCode"] = f"o{entity}"
+            log.info("Routing write for %s to Drafts (DocObjectCode: %s)", entity, payload["DocObjectCode"])
+            entity = "Drafts"
 
         log.info("Posting to Service Layer: %s  payload=%s", entity, payload)
         return self._post(entity, payload)

@@ -82,6 +82,12 @@ INDEXES = [
 def migrate() -> None:
     print(f"Database: {DB_PATH}")
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize all SQLAlchemy tables (partners, tenants, super_admins, usage_log, company_connections, etc.)
+    import asyncio
+    from database import init_db
+    asyncio.run(init_db())
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("PRAGMA journal_mode=WAL")

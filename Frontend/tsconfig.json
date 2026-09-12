@@ -4,6 +4,7 @@
     "allowJs": true,
     "target": "ES6",
     "skipLibCheck": true,
+    "typeRoots": ["./node_modules/@types"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,

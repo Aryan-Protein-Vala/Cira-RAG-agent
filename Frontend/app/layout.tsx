@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Cinntra / CIRA — Enterprise Recruitment & Intelligence Control Center',
-  description: 'Securely query enterprise recruitment and SAP Business One data with AI natural language intelligence.',
+  title: 'CIRA — Enterprise Intelligence Control Center',
+  description: 'Securely query enterprise and SAP Business One data with AI natural language intelligence.',
   generator: 'v0.app',
   icons: {
     icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25"><rect x="4" y="8" width="4" height="12" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.48" /><rect x="10" y="3" width="4" height="19" rx="2" fill="%23818cf8" transform="skewX(-16)" /><rect x="16" y="6" width="4" height="15" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.75" /></svg>',

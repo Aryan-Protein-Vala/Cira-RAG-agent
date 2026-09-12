@@ -32,6 +32,7 @@ from database import (
     init_db,
 )
 from sap import router as sap
+from admin_routes import router as admin_router
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL, logging.INFO),
@@ -102,20 +103,6 @@ class RenameRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
-class AdminLoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class CompanyConnectionCreate(BaseModel):
-    company_db: str
-    hana_address: str
-    hana_port: int
-    hana_user: str
-    hana_password: str
-    service_layer_port: int = 50000
-
-
 class TitleRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000)
 
@@ -133,28 +120,47 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
     
     # Check multi-tenant connection
-    from database import CompanyConnection
-    result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == user["company_db"]))
-    conn = result.scalars().first()
-    if not conn:
-        # If it's the default company configured in .env, auto-register it
-        if user["company_db"] == config.SAP_B1_COMPANY_DB or not config.SAP_B1_COMPANY_DB:
-            conn = CompanyConnection(
-                company_db=user["company_db"],
-                hana_address=config.HANA_HOST or "127.0.0.1",
-                hana_port=config.HANA_PORT or 30013,
-                hana_user=config.HANA_USER or "SYSTEM",
-                hana_password=config.HANA_PASSWORD or "",
-                # Service Layer port is ALWAYS 50000, never the HANA port (30013)
-                service_layer_port=config.SERVICE_LAYER_PORT,
-            )
-            db.add(conn)
-            await db.commit()
-        else:
+    from database import Tenant, CompanyConnection, Partner
+    t_res = await db.execute(select(Tenant).where(Tenant.company_db == user["company_db"]))
+    tenant_row = t_res.scalars().first()
+    
+    brand_name = "CIRA"
+    logo_url = ""
+    
+    if tenant_row:
+        if not tenant_row.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Company database is not configured on this server.",
+                detail="Tenant account is inactive or suspended.",
             )
+        # Fetch partner branding
+        p_res = await db.execute(select(Partner).where(Partner.id == tenant_row.partner_id))
+        partner = p_res.scalars().first()
+        if partner:
+            brand_name = partner.brand_name or "CIRA"
+            logo_url = partner.logo_url or ""
+    else:
+        result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == user["company_db"]))
+        conn = result.scalars().first()
+        if not conn:
+            # If it's the default company configured in .env, auto-register it
+            if user["company_db"] == config.SAP_B1_COMPANY_DB or not config.SAP_B1_COMPANY_DB:
+                conn = CompanyConnection(
+                    company_db=user["company_db"],
+                    hana_address=config.HANA_HOST or "127.0.0.1",
+                    hana_port=config.HANA_PORT or 30013,
+                    hana_user=config.HANA_USER or "SYSTEM",
+                    hana_password=config.HANA_PASSWORD or "",
+                    # Service Layer port is ALWAYS 50000, never the HANA port (30013)
+                    service_layer_port=config.SERVICE_LAYER_PORT,
+                )
+                db.add(conn)
+                await db.commit()
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Company database is not configured on this server.",
+                )
         
     minted = create_token(user["employee_id"], user["name"], user["roles"], company_db=user["company_db"])
     return {
@@ -164,6 +170,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             "employee_id": user["employee_id"],
             "name": user["name"],
             "roles": user["roles"],
+            "brand_name": brand_name,
+            "logo_url": logo_url
         },
     }
 
@@ -171,6 +179,9 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 @app.get("/auth/me")
 async def me(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     ctx = validate_and_extract(credentials)
+    # The frontend usually hits /auth/me to restore session, so it's good to include it here but
+    # for simplicity, we rely on the login data stored in local storage for branding, or we can just 
+    # fetch the branding dynamically if needed. We'll just return what's in the token.
     return {
         "employee_id": ctx["employee_id"],
         "name": ctx.get("name"),
@@ -184,82 +195,60 @@ async def set_tenant_context(credentials: HTTPAuthorizationCredentials = Depends
     ctx = validate_and_extract(credentials)
     company_db = ctx.get("company_db")
     if company_db:
-        from database import CompanyConnection
-        result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == company_db))
-        conn = result.scalars().first()
-        if conn:
-            import config
+        from database import Tenant, CompanyConnection, Partner
+        result = await db.execute(select(Tenant).where(Tenant.company_db == company_db))
+        tenant_row = result.scalars().first()
+        
+        if tenant_row:
+            if not tenant_row.is_active:
+                raise HTTPException(status_code=403, detail="Tenant is inactive.")
+            p_res = await db.execute(select(Partner).where(Partner.id == tenant_row.partner_id))
+            partner_row = p_res.scalars().first()
+            if partner_row and not partner_row.is_active:
+                raise HTTPException(status_code=403, detail="Partner account is suspended.")
+
+            is_mssql = (tenant_row.backend_type or "").lower() == "mssql"
             tenant_config = {
-                "HANA_SCHEMA": conn.company_db,
-                "SAP_B1_COMPANY_DB": conn.company_db,
-                "HANA_HOST": conn.hana_address,
-                "HANA_PORT": conn.hana_port,
-                "HANA_USER": conn.hana_user,
-                "HANA_PASSWORD": conn.hana_password,
-                "SAP_B1_HOST": conn.hana_address,
-                # SAP_B1_PORT is the HANA/DB port, SERVICE_LAYER_PORT is for OData writes
-                "SAP_B1_PORT": conn.hana_port,
-                "SERVICE_LAYER_PORT": conn.service_layer_port,  # always 50000
-                "SAP_B1_USER": config.SAP_B1_USER,
-                "SAP_B1_PASSWORD": config.SAP_B1_PASSWORD,
+                "HANA_SCHEMA": tenant_row.company_db,
+                "SAP_B1_COMPANY_DB": tenant_row.company_db,
+                "HANA_HOST": tenant_row.sap_host,
+                "HANA_PORT": tenant_row.sap_hana_port,
+                "HANA_USER": tenant_row.sap_db_user,
+                "HANA_PASSWORD": tenant_row.sap_db_password,
+                "MSSQL_HOST": tenant_row.sap_host if is_mssql else "",
+                "MSSQL_PORT": tenant_row.sap_hana_port if is_mssql else 1433,
+                "MSSQL_USER": tenant_row.sap_db_user if is_mssql else "",
+                "MSSQL_PASSWORD": tenant_row.sap_db_password if is_mssql else "",
+                "SAP_B1_HOST": tenant_row.sap_host,
+                "SAP_B1_PORT": tenant_row.sap_hana_port,
+                "SERVICE_LAYER_PORT": tenant_row.sap_sl_port,
+                "SAP_B1_USER": tenant_row.sap_sl_user,
+                "SAP_B1_PASSWORD": tenant_row.sap_sl_password,
+                "WRITE_ENABLED": bool(tenant_row.write_enabled),
             }
             config.CURRENT_TENANT.set(tenant_config)
+        else:
+            c_res = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == company_db))
+            conn = c_res.scalars().first()
+            if conn:
+                tenant_config = {
+                    "HANA_SCHEMA": conn.company_db,
+                    "SAP_B1_COMPANY_DB": conn.company_db,
+                    "HANA_HOST": conn.hana_address,
+                    "HANA_PORT": conn.hana_port,
+                    "HANA_USER": conn.hana_user,
+                    "HANA_PASSWORD": conn.hana_password,
+                    "SAP_B1_HOST": conn.hana_address,
+                    "SAP_B1_PORT": conn.hana_port,
+                    "SERVICE_LAYER_PORT": conn.service_layer_port,
+                    "SAP_B1_USER": config.SAP_B1_USER,
+                    "SAP_B1_PASSWORD": config.SAP_B1_PASSWORD,
+                    "WRITE_ENABLED": False,
+                }
+                config.CURRENT_TENANT.set(tenant_config)
     return ctx
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Admin
-# ─────────────────────────────────────────────────────────────────────────────
-@app.post("/admin/login")
-async def admin_login(request: AdminLoginRequest):
-    if request.username == "admin" and request.password == "asdfghjkl;":
-        minted = create_token("admin", "Administrator", ["admin"], company_db="")
-        return {"token": minted["token"]}
-    raise HTTPException(status_code=401, detail="Invalid admin credentials")
-
-
-@app.get("/admin/connections")
-async def get_connections(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    if "admin" not in ctx.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    from database import CompanyConnection
-    result = await db.execute(select(CompanyConnection))
-    connections = result.scalars().all()
-    return [{"id": c.id, "company_db": c.company_db, "hana_address": c.hana_address, "hana_port": c.hana_port, "hana_user": c.hana_user, "service_layer_port": c.service_layer_port} for c in connections]
-
-
-@app.post("/admin/connections")
-async def create_connection(data: CompanyConnectionCreate, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    if "admin" not in ctx.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    from database import CompanyConnection
-    # Check if exists
-    result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == data.company_db))
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Company DB already exists")
-        
-    conn = CompanyConnection(**data.dict())
-    db.add(conn)
-    await db.commit()
-    await db.refresh(conn)
-    return {"id": conn.id, "company_db": conn.company_db}
-
-
-@app.delete("/admin/connections/{id}")
-async def delete_connection(id: int, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
-    ctx = validate_and_extract(credentials)
-    if "admin" not in ctx.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    from database import CompanyConnection
-    await db.execute(delete(CompanyConnection).where(CompanyConnection.id == id))
-    await db.commit()
-    return {"ok": True}
-
+app.include_router(admin_router)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Health & diagnostics
@@ -335,17 +324,28 @@ async def sap_write(
             )
             conn_row.service_layer_port = config.SERVICE_LAYER_PORT
             await db.commit()
+            curr = dict(config.CURRENT_TENANT.get() or {})
+            curr["SERVICE_LAYER_PORT"] = config.SERVICE_LAYER_PORT
+            config.CURRENT_TENANT.set(curr)
+
+    current_cfg = config.CURRENT_TENANT.get({})
+    if not current_cfg.get("WRITE_ENABLED", False):
+        raise HTTPException(status_code=403, detail="SAP writes are disabled for this tenant.")
 
     try:
-        result = await sap.create_entity(body.entity, body.data)
+        target = body.table if body.table else body.entity
+        result = await sap.create_entity(target, body.data)
         return {"ok": True, "result": result}
+    except HTTPException:
+        raise
     except Exception as exc:
         log.error("SAP write failed for entity=%s data=%s: %s", body.entity, body.data, exc, exc_info=True)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/sap/health")
-async def sap_health():
+async def sap_health(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    validate_and_extract(credentials)
     return await sap.health()
 
 

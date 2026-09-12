@@ -660,6 +660,8 @@ def _friendly_error(message: str) -> str:
     if "api key" in low or "401" in low or "unauthor" in low:
         return ("⚠ The AI model rejected the request — check OPENROUTER_API_KEY in "
                 "Backend/.env.")
+    if "maximum" in low and "per hour" in low or "company database" in low:
+        return "⚠ Company database query rate limit reached. Please wait a short while before submitting more queries."
     if "rate limit" in low or "429" in low:
         return "⚠ The AI provider is rate limiting us. Please retry in a few seconds."
     if "recursion" in low:

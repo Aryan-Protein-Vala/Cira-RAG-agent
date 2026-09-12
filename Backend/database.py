@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import datetime as dt
+from datetime import datetime, timezone
+import os
 
 from sqlalchemy import Column, DateTime, Index, Integer, String, Text, event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+from encryption import EncryptedString
 
 import config
 
@@ -49,10 +53,77 @@ class CompanyConnection(Base):
     hana_address = Column(String, nullable=False)
     hana_port = Column(Integer, nullable=False)
     hana_user = Column(String, nullable=False)
-    hana_password = Column(String, nullable=False)
+    hana_password = Column(EncryptedString, nullable=False)
     service_layer_port = Column(Integer, default=50000)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class Partner(Base):
+    __tablename__ = "partners"
+
+    id = Column(String, primary_key=True, index=True) # UUID string
+    name = Column(String, nullable=False)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    logo_url = Column(String)
+    brand_name = Column(String)
+    plan = Column(String, default="pilot")
+    max_tenants = Column(Integer, default=3)
+    is_active = Column(Integer, default=1) # Boolean
+    created_at = Column(DateTime, default=_utcnow)
+    stripe_customer_id = Column(String)
+    billing_email = Column(String)
+
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(String, primary_key=True, index=True) # UUID string
+    partner_id = Column(String, index=True, nullable=False) # Refers to partners.id
+    company_name = Column(String, nullable=False)
+    company_db = Column(String, nullable=False)
+    
+    # Encrypted SAP credentials
+    sap_host = Column(EncryptedString, nullable=False)
+    sap_hana_port = Column(Integer, default=30013)
+    sap_sl_port = Column(Integer, default=50000)
+    sap_db_user = Column(EncryptedString, nullable=False)
+    sap_db_password = Column(EncryptedString, nullable=False)
+    sap_sl_user = Column(EncryptedString, default="manager")
+    sap_sl_password = Column(EncryptedString, nullable=False)
+    
+    # Config
+    backend_type = Column(String, default="hana")
+    currency = Column(String, default="INR")
+    locale = Column(String, default="en-IN")
+    llm_api_key = Column(EncryptedString)
+    llm_endpoint = Column(String)
+    write_enabled = Column(Integer, default=0) # Boolean
+    is_active = Column(Integer, default=1) # Boolean
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class SuperAdmin(Base):
+    __tablename__ = "super_admins"
+
+    id = Column(String, primary_key=True, index=True) # UUID string
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    totp_secret = Column(EncryptedString)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class UsageLog(Base):
+    __tablename__ = "usage_log"
+
+    id = Column(String, primary_key=True, index=True) # UUID string
+    tenant_id = Column(String, index=True, nullable=False)
+    partner_id = Column(String, index=True, nullable=False)
+    query_count = Column(Integer, default=0)
+    write_count = Column(Integer, default=0)
+    month = Column(String, nullable=False) # e.g. "2026-09"
 
 
 class ChatSession(Base):
@@ -177,6 +248,11 @@ __all__ = [
     "Base",
     "ChatMessage",
     "ChatSession",
+    "CompanyConnection",
+    "Partner",
+    "Tenant",
+    "SuperAdmin",
+    "UsageLog",
     "create_short_lived_session",
     "engine",
     "func",

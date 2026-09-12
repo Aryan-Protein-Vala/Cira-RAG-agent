@@ -556,11 +556,37 @@ async def describe_table(table: str, sample_rows: int = 3) -> dict:
 
 
 async def run_query(payload: dict) -> QueryResult:
-    return await asyncio.to_thread(_run_query_sync, payload)
+    from audit import audit_log
+    from ratelimit import check_rate_limit
+    from config import CURRENT_TENANT
+    tenant = CURRENT_TENANT.get() or {}
+    tenant_id = tenant.get("SAP_B1_COMPANY_DB") or tenant.get("HANA_SCHEMA") or "default"
+    
+    try:
+        check_rate_limit(tenant_id, "read")
+        res = await asyncio.to_thread(_run_query_sync, payload)
+        audit_log("run_query", {"payload": payload}, "success")
+        return res
+    except Exception as e:
+        audit_log("run_query", {"payload": payload}, "error", str(e))
+        raise
 
 
 async def run_sql(sql: str, limit: int | None = None) -> QueryResult:
-    return await asyncio.to_thread(_run_sql_sync, sql, limit)
+    from audit import audit_log
+    from ratelimit import check_rate_limit
+    from config import CURRENT_TENANT
+    tenant = CURRENT_TENANT.get() or {}
+    tenant_id = tenant.get("SAP_B1_COMPANY_DB") or tenant.get("HANA_SCHEMA") or "default"
+    
+    try:
+        check_rate_limit(tenant_id, "read")
+        res = await asyncio.to_thread(_run_sql_sync, sql, limit)
+        audit_log("run_sql", {"sql": sql, "limit": limit}, "success")
+        return res
+    except Exception as e:
+        audit_log("run_sql", {"sql": sql, "limit": limit}, "error", str(e))
+        raise
 
 
 async def health() -> dict:
@@ -568,11 +594,17 @@ async def health() -> dict:
 
 
 def _create_entity_sync(table_or_entity: str, data: dict) -> dict:
+    from config import CURRENT_TENANT
+    tenant = CURRENT_TENANT.get() or {}
+    if not tenant.get("WRITE_ENABLED", False):
+        from .types_ import SapDataError
+        raise SapDataError("Write operations are disabled for this tenant.")
+
     backend = get_active_backend()
-    if hasattr(backend, "create_entity"):
+    if backend.simulated:
         return backend.create_entity(table_or_entity, data)
-    
-    # If active backend is HANA SQL, delegate write operations to Service Layer
+
+    # For live systems (HANA, MSSQL, Service Layer), write operations route through Service Layer
     sl = ServiceLayerBackend()
     probe = sl.ping()
     if not probe.get("ok"):
@@ -585,7 +617,21 @@ def _create_entity_sync(table_or_entity: str, data: dict) -> dict:
 
 
 async def create_entity(table_or_entity: str, data: dict) -> dict:
-    return await asyncio.to_thread(_create_entity_sync, table_or_entity, data)
+    from audit import audit_log
+    from ratelimit import check_rate_limit
+    from config import CURRENT_TENANT
+    tenant = CURRENT_TENANT.get() or {}
+    tenant_id = tenant.get("SAP_B1_COMPANY_DB") or tenant.get("HANA_SCHEMA") or "default"
+    
+    try:
+        check_rate_limit(tenant_id, "write")
+        res = await asyncio.to_thread(_create_entity_sync, table_or_entity, data)
+        doc_entry = res.get("DocEntry") if isinstance(res, dict) else None
+        audit_log("create_entity", {"entity": table_or_entity, "data": data, "doc_entry": doc_entry}, "success")
+        return res
+    except Exception as e:
+        audit_log("create_entity", {"entity": table_or_entity, "data": data}, "error", str(e))
+        raise
 
 
 __all__ = [

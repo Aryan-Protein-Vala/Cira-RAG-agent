@@ -128,7 +128,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
     const shouldHideTicks = !expanded && data.length > 8
     const xAxisProps = expanded
       ? { tick: true, angle: -45, textAnchor: 'end' as const, height: 80, interval: 0 as const }
-      : { tick: shouldHideTicks ? false : undefined, height: shouldHideTicks ? 10 : 30 }
+      : { tick: false, height: 10 }
 
     return (
       <ResponsiveContainer width="100%" height="100%">
@@ -178,8 +178,8 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
               nameKey={xKey}
               cx="50%"
               cy="50%"
-              outerRadius={expanded ? 180 : 85}
-              innerRadius={expanded ? 100 : 45}
+              outerRadius={expanded ? 200 : 120}
+              innerRadius={expanded ? 120 : 70}
               paddingAngle={3}
             >
               {data.map((_, index) => (
@@ -240,7 +240,7 @@ export function ChartCard({ payload }: { payload: ChartPayload }) {
         </div>
         
         <div className="p-4">
-          <div className="w-full h-[320px]">
+          <div className="w-full h-[320px] flex items-center justify-center">
             {renderChart(false)}
           </div>
         </div>

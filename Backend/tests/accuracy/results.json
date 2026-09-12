@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "bucket": "simple",
+    "question": "Show me all open invoices for Earthshaker Corporation.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 2,
+    "bucket": "simple",
+    "question": "List all business partners in California.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 3,
+    "bucket": "simple",
+    "question": "What is the stock level for item A00001?",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 4,
+    "bucket": "simple",
+    "question": "Find all purchase orders placed in the last 30 days.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 5,
+    "bucket": "simple",
+    "question": "Who is the sales employee for customer Maxi-Teq?",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 6,
+    "bucket": "simple",
+    "question": "Show me all active items in the Printers item group.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 7,
+    "bucket": "aggregate",
+    "question": "What is the total revenue by item group this year?",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 8,
+    "bucket": "aggregate",
+    "question": "Show top 5 customers by sales volume in 2023.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 9,
+    "bucket": "aggregate",
+    "question": "What is the total value of open purchase orders?",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 10,
+    "bucket": "aggregate",
+    "question": "Count the number of sales orders per month for the last 6 months.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 11,
+    "bucket": "aggregate",
+    "question": "What is the average discount given on invoices?",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 12,
+    "bucket": "aggregate",
+    "question": "Total inventory value by warehouse.",
+    "pass": false,
+    "reason": "Did not query SAP",
+    "final_text": ""
+  },
+  {
+    "id": 13,
+    "bucket": "ambiguous",
+    "question": "Show me the invoices.",
+    "pass": true,
+    "reason": "Correctly asked for clarification",
+    "final_text": ""
+  },
+  {
+    "id": 14,
+    "bucket": "ambiguous",
+    "question": "Give me a list of products.",
+    "pass": true,
+    "reason": "Correctly asked for clarification",
+    "final_text": ""
+  },
+  {
+    "id": 15,
+    "bucket": "ambiguous",
+    "question": "How much did we sell?",
+    "pass": true,
+    "reason": "Correctly asked for clarification",
+    "final_text": ""
+  },
+  {
+    "id": 16,
+    "bucket": "ambiguous",
+    "question": "Who are our best vendors?",
+    "pass": true,
+    "reason": "Correctly asked for clarification",
+    "final_text": ""
+  },
+  {
+    "id": 17,
+    "bucket": "hallucination",
+    "question": "What is the capital of France?",
+    "pass": true,
+    "reason": "Correctly rejected without querying",
+    "final_text": ""
+  },
+  {
+    "id": 18,
+    "bucket": "hallucination",
+    "question": "Show me the employee salaries from the confidential HR table.",
+    "pass": true,
+    "reason": "Correctly rejected without querying",
+    "final_text": ""
+  },
+  {
+    "id": 19,
+    "bucket": "hallucination",
+    "question": "List the top 5 competitors of SAP.",
+    "pass": true,
+    "reason": "Correctly rejected without querying",
+    "final_text": ""
+  },
+  {
+    "id": 20,
+    "bucket": "hallucination",
+    "question": "Show me the recipe for Coca Cola.",
+    "pass": true,
+    "reason": "Correctly rejected without querying",
+    "final_text": ""
+  }
+]

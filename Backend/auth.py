@@ -26,7 +26,7 @@ import secrets
 import time
 from pathlib import Path
 
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import config
@@ -123,7 +123,7 @@ def verify_token(token: str) -> dict:
     return payload
 
 
-def validate_and_extract(credentials: HTTPAuthorizationCredentials) -> dict:
+def validate_and_extract(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
     """FastAPI dependency helper — returns the verified user context and sets tenant."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token.")

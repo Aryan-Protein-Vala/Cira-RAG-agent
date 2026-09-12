@@ -1,0 +1,245 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CIRA Accuracy Scorecard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 2rem; color: #333; max-width: 1000px; margin: 0 auto; }
+        h1 { margin-bottom: 0.5rem; }
+        .summary { display: flex; gap: 1rem; margin-bottom: 2rem; }
+        .card { padding: 1rem; border-radius: 8px; flex: 1; text-align: center; }
+        .card h2 { margin: 0; font-size: 2rem; }
+        .pass-card { background: #d4edda; color: #155724; }
+        .fail-card { background: #f8d7da; color: #721c24; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { padding: 0.75rem; border: 1px solid #ddd; text-align: left; }
+        th { background: #f8f9fa; }
+        .pass { color: green; font-weight: bold; }
+        .fail { color: red; font-weight: bold; }
+        .bucket-summary { margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    <h1>CIRA LLM Accuracy Scorecard</h1>
+    <p>Target: Sandbox Dataset</p>
+    
+    <div class="summary">
+        <div class="card pass-card">
+            <h2>40.0%</h2>
+            <p>Overall Accuracy</p>
+        </div>
+        <div class="card">
+            <h2>20</h2>
+            <p>Total Questions</p>
+        </div>
+    </div>
+    
+    <div class="bucket-summary">
+        <h3>Accuracy by Category</h3>
+        <ul>
+            <li><strong>Simple</strong>: 0.0% (0/6)</li>
+<li><strong>Aggregate</strong>: 0.0% (0/6)</li>
+<li><strong>Ambiguous</strong>: 100.0% (4/4)</li>
+<li><strong>Hallucination</strong>: 100.0% (4/4)</li>
+
+        </ul>
+    </div>
+    
+    <h3>Detailed Results</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Bucket</th>
+                <th>Question</th>
+                <th>Status</th>
+                <th>Reason</th>
+                <th>LLM Output Snippet</th>
+            </tr>
+        </thead>
+        <tbody>
+            
+        <tr>
+            <td>1</td>
+            <td>simple</td>
+            <td>Show me all open invoices for Earthshaker Corporation.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>2</td>
+            <td>simple</td>
+            <td>List all business partners in California.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>3</td>
+            <td>simple</td>
+            <td>What is the stock level for item A00001?</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>4</td>
+            <td>simple</td>
+            <td>Find all purchase orders placed in the last 30 days.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>5</td>
+            <td>simple</td>
+            <td>Who is the sales employee for customer Maxi-Teq?</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>6</td>
+            <td>simple</td>
+            <td>Show me all active items in the Printers item group.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>7</td>
+            <td>aggregate</td>
+            <td>What is the total revenue by item group this year?</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>8</td>
+            <td>aggregate</td>
+            <td>Show top 5 customers by sales volume in 2023.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>9</td>
+            <td>aggregate</td>
+            <td>What is the total value of open purchase orders?</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>10</td>
+            <td>aggregate</td>
+            <td>Count the number of sales orders per month for the last 6 months.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>11</td>
+            <td>aggregate</td>
+            <td>What is the average discount given on invoices?</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>12</td>
+            <td>aggregate</td>
+            <td>Total inventory value by warehouse.</td>
+            <td class="fail">FAIL</td>
+            <td>Did not query SAP</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>13</td>
+            <td>ambiguous</td>
+            <td>Show me the invoices.</td>
+            <td class="pass">PASS</td>
+            <td>Correctly asked for clarification</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>14</td>
+            <td>ambiguous</td>
+            <td>Give me a list of products.</td>
+            <td class="pass">PASS</td>
+            <td>Correctly asked for clarification</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>15</td>
+            <td>ambiguous</td>
+            <td>How much did we sell?</td>
+            <td class="pass">PASS</td>
+            <td>Correctly asked for clarification</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>16</td>
+            <td>ambiguous</td>
+            <td>Who are our best vendors?</td>
+            <td class="pass">PASS</td>
+            <td>Correctly asked for clarification</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>17</td>
+            <td>hallucination</td>
+            <td>What is the capital of France?</td>
+            <td class="pass">PASS</td>
+            <td>Correctly rejected without querying</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>18</td>
+            <td>hallucination</td>
+            <td>Show me the employee salaries from the confidential HR table.</td>
+            <td class="pass">PASS</td>
+            <td>Correctly rejected without querying</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>19</td>
+            <td>hallucination</td>
+            <td>List the top 5 competitors of SAP.</td>
+            <td class="pass">PASS</td>
+            <td>Correctly rejected without querying</td>
+            <td><code></code></td>
+        </tr>
+        
+        <tr>
+            <td>20</td>
+            <td>hallucination</td>
+            <td>Show me the recipe for Coca Cola.</td>
+            <td class="pass">PASS</td>
+            <td>Correctly rejected without querying</td>
+            <td><code></code></td>
+        </tr>
+        
+        </tbody>
+    </table>
+</body>
+</html>

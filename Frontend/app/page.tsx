@@ -78,7 +78,7 @@ function newSessionId(): string {
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Login Screen                                                               */
 /* ────────────────────────────────────────────────────────────────────────── */
-function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void }) {
+function LoginScreen({ onLogin, brandName, logoUrl }: { onLogin: (user: any, token: string) => void, brandName?: string, logoUrl?: string }) {
   const [employee, setEmployee] = useState('')
   const [password, setPassword] = useState('')
   const [companyDb, setCompanyDb] = useState('')
@@ -121,20 +121,15 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
       <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl shadow-indigo-500/10 border border-gray-100 relative z-10 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative w-[50px] h-[50px] rounded-[18px] bg-[#f3b8b7] shadow-[5px_6px_11px_#bfbac1,-3px_-3px_9px_#fbf7f9] flex-shrink-0 animate-fly-in-left">
-              <div className="absolute left-[24px] -top-[9px] w-[2px] h-[10px] bg-[#6f7ea8] after:content-[''] after:absolute after:-top-[3px] after:-left-[2px] after:w-[6px] after:h-[6px] after:rounded-full after:bg-[#7ea4ee]"></div>
-              <div className="absolute top-[11px] left-[8px] w-[34px] h-[22px] rounded-lg bg-[#e8edf7] flex justify-evenly items-center shadow-[inset_1px_1px_3px_#c1c7d4]">
-                 <i className="w-[5px] h-[5px] rounded-full bg-[#526793]" />
-                 <i className="w-[5px] h-[5px] rounded-full bg-[#526793]" />
-              </div>
-              <div className="absolute left-[13px] bottom-[6px] flex gap-[4px]">
-                <b className="w-[5px] h-[4px] rounded bg-[#7384b0]" />
-                <b className="w-[5px] h-[4px] rounded bg-[#7384b0]" />
-                <b className="w-[5px] h-[4px] rounded bg-[#7384b0]" />
-              </div>
+            <div className="relative w-[50px] h-[50px] rounded-[18px] bg-indigo-50 shadow-[5px_6px_11px_#bfbac1,-3px_-3px_9px_#fbf7f9] flex-shrink-0 flex items-center justify-center overflow-hidden">
+              {logoUrl ? (
+                <img src={logoUrl} alt={brandName || "Logo"} className="w-full h-full object-contain p-1" />
+              ) : (
+                <img src='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25"><rect x="4" y="8" width="4" height="12" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.48" /><rect x="10" y="3" width="4" height="19" rx="2" fill="%23818cf8" transform="skewX(-16)" /><rect x="16" y="6" width="4" height="15" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.75" /></svg>' className="w-full h-full object-cover p-1 opacity-70" />
+              )}
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Cinntra / CIRA</h2>
+              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">{brandName || 'AI Agent Login'}</h2>
               <span className="text-[11px] font-bold text-indigo-600 tracking-wider uppercase">Enterprise Intelligence</span>
             </div>
           </div>
@@ -340,6 +335,8 @@ export default function Page() {
   const [profileName, setProfileName] = useState('User')
   const [profileDept, setProfileDept] = useState('Recruitment Operations')
   const [profileRole, setProfileRole] = useState('ADMIN')
+  const [brandName, setBrandName] = useState('CIRA')
+  const [logoUrl, setLogoUrl] = useState('')
 
   // UI Views: 'chat'
   const [activeTab, setActiveTab] = useState<'chat'>('chat')
@@ -441,9 +438,13 @@ export default function Page() {
 
     const savedToken = localStorage.getItem('cira-token')
     const savedEmpId = localStorage.getItem('cira-emp-id')
+    const savedBrandName = localStorage.getItem('cira-brand') || 'CIRA'
+    const savedLogoUrl = localStorage.getItem('cira-logo') || ''
     if (savedToken && savedEmpId && savedToken !== 'demo-token') {
       setEmployeeId(savedEmpId)
       setSessionToken(savedToken)
+      setBrandName(savedBrandName)
+      setLogoUrl(savedLogoUrl)
       setLoggedIn(true)
     } else {
       setLoggedIn(false)
@@ -869,6 +870,7 @@ export default function Page() {
           return
         }
       }
+      throw new Error('Not found or invalid response')
     } catch {
       // demo messages
       setMessages([
@@ -897,14 +899,20 @@ export default function Page() {
   if (!loggedIn) {
     return (
       <LoginScreen
+        brandName={brandName}
+        logoUrl={logoUrl}
         onLogin={(user, token) => {
           setEmployeeId(user.employee_id)
           setProfileName(user.name)
           setSessionToken(token)
+          setBrandName(user.brand_name || 'CIRA')
+          setLogoUrl(user.logo_url || '')
           setLoggedIn(true)
           localStorage.setItem('cira-token', token)
           localStorage.setItem('cira-emp-id', user.employee_id)
           localStorage.setItem('cira-profile-name', user.name)
+          localStorage.setItem('cira-brand', user.brand_name || 'CIRA')
+          localStorage.setItem('cira-logo', user.logo_url || '')
         }}
       />
     )
@@ -926,10 +934,14 @@ export default function Page() {
         {/* Profile Area */}
         <div className="flex items-center gap-3 mb-8 px-4">
           <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
-            <img src='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25"><rect x="4" y="8" width="4" height="12" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.48" /><rect x="10" y="3" width="4" height="19" rx="2" fill="%23818cf8" transform="skewX(-16)" /><rect x="16" y="6" width="4" height="15" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.75" /></svg>' alt="Cira" className="w-full h-full object-cover p-1" />
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="w-full h-full object-contain p-1" />
+            ) : (
+              <img src='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25"><rect x="4" y="8" width="4" height="12" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.48" /><rect x="10" y="3" width="4" height="19" rx="2" fill="%23818cf8" transform="skewX(-16)" /><rect x="16" y="6" width="4" height="15" rx="2" fill="%23818cf8" transform="skewX(-16)" opacity="0.75" /></svg>' alt={brandName} className="w-full h-full object-cover p-1" />
+            )}
           </div>
           <div className="flex-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden">
-            <h3 className="text-sm font-semibold text-gray-900 truncate">Cira</h3>
+            <h3 className="text-sm font-semibold text-gray-900 truncate">{brandName}</h3>
           </div>
           <button onClick={() => setIsMobileSidebarOpen(false)} className="md:hidden p-1 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={20} />
@@ -1063,7 +1075,7 @@ export default function Page() {
                   <div className="mb-10 space-y-3 pl-0 md:pl-2">
                     <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-gray-900 flex items-center justify-center gap-2 md:gap-3 flex-wrap">
                       <span className="bg-blue-100/60 px-4 md:px-5 py-2 rounded-[2rem] text-[#3c78a0] inline-block -rotate-2 hover:rotate-1 transition-transform duration-300 shadow-sm text-center">
-                        Welcome to Cira! 👋
+                        Welcome to {brandName}! 👋
                       </span>
                     </h1>
                     <h2 className="text-2xl md:text-[40px] leading-tight font-semibold tracking-tight text-gray-400 text-center">
@@ -1165,7 +1177,7 @@ export default function Page() {
                   <div className={`flex-1 flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start w-full'} w-full`}>
                     {message.role === 'assistant' && !message.content && !message.data && !message.error && isThinking && index === messages.length - 1 ? (
                       <div className="flex items-center h-8 pl-4 trail-text font-semibold text-sm mt-1 text-indigo-500">
-                        {Array.from("CIRA is thinking...").map((char, i) => (
+                        {Array.from(`${brandName} is thinking...`).map((char, i) => (
                           <span
                             key={i}
                             className="inline-block"

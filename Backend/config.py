@@ -159,6 +159,7 @@ USE_LLM = _bool("CIRA_USE_LLM", True) and bool(OPENROUTER_API_KEY)
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 SECRET_KEY = _str("CIRA_SECRET_KEY", "")
+FERNET_KEY = _str("CIRA_FERNET_KEY", "")
 TOKEN_TTL_SECONDS = _int("CIRA_TOKEN_TTL_SECONDS", 12 * 3600)
 # Demo/bootstrap credentials.  In production point CIRA_USERS at a JSON map or
 # wire validate_credentials() to your IdP / SAP OUSR table.
