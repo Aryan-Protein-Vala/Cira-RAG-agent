@@ -145,7 +145,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
                 hana_port=config.HANA_PORT or 30013,
                 hana_user=config.HANA_USER or "SYSTEM",
                 hana_password=config.HANA_PASSWORD or "",
-                service_layer_port=config.SAP_B1_PORT or 50000,
+                # Service Layer port is ALWAYS 50000, never the HANA port (30013)
+                service_layer_port=config.SERVICE_LAYER_PORT,
             )
             db.add(conn)
             await db.commit()
@@ -196,9 +197,11 @@ async def set_tenant_context(credentials: HTTPAuthorizationCredentials = Depends
                 "HANA_USER": conn.hana_user,
                 "HANA_PASSWORD": conn.hana_password,
                 "SAP_B1_HOST": conn.hana_address,
-                "SAP_B1_PORT": conn.service_layer_port,
-                "SAP_B1_USER": conn.hana_user,
-                "SAP_B1_PASSWORD": conn.hana_password,
+                # SAP_B1_PORT is the HANA/DB port, SERVICE_LAYER_PORT is for OData writes
+                "SAP_B1_PORT": conn.hana_port,
+                "SERVICE_LAYER_PORT": conn.service_layer_port,  # always 50000
+                "SAP_B1_USER": config.SAP_B1_USER,
+                "SAP_B1_PASSWORD": config.SAP_B1_PASSWORD,
             }
             config.CURRENT_TENANT.set(tenant_config)
     return ctx
@@ -316,12 +319,28 @@ class WriteRequest(BaseModel):
 async def sap_write(
     body: WriteRequest,
     user_context: dict = Depends(set_tenant_context),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new entity record in SAP Business One via the Service Layer."""
+    # Ensure stored service_layer_port is correct (fix legacy rows that stored 30013)
+    company_db = user_context.get("company_db", "")
+    if company_db:
+        from database import CompanyConnection
+        result = await db.execute(select(CompanyConnection).where(CompanyConnection.company_db == company_db))
+        conn_row = result.scalars().first()
+        if conn_row and conn_row.service_layer_port == config.HANA_PORT:
+            log.warning(
+                "Fixing stored service_layer_port %s → 50000 for %s",
+                conn_row.service_layer_port, company_db
+            )
+            conn_row.service_layer_port = config.SERVICE_LAYER_PORT
+            await db.commit()
+
     try:
         result = await sap.create_entity(body.entity, body.data)
         return {"ok": True, "result": result}
     except Exception as exc:
+        log.error("SAP write failed for entity=%s data=%s: %s", body.entity, body.data, exc, exc_info=True)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
@@ -632,13 +651,12 @@ async def generate_title_endpoint(
 ):
     try:
         validate_and_extract(credentials)
-    except Exception:
-        pass
-    try:
-        return {"title": await agent_generate_title(request.prompt)}
-    except Exception:
+        title = await agent_generate_title(request.prompt)
+        return {"title": title}
+    except Exception as exc:
+        log.warning("generate_title fallback: %s", exc)
         words = (request.prompt or "").strip().split()
-        return {"title": " ".join(words[:4])[:40] or "New conversation"}
+        return {"title": " ".join(words[:5])[:40] or "New conversation"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

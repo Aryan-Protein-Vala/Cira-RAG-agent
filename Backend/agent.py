@@ -326,7 +326,7 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         entity: str,
         table: str,
         title: str,
-        fields: list[dict],
+        fields: list[dict] = None,
     ) -> dict:
         """Show the user a data-entry form to create a new record in SAP Business One.
 
@@ -334,41 +334,41 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
         a new record (e.g. "create a customer", "add a new invoice", "register a vendor").
         Do NOT call it for queries or reporting.
 
-        entity:  The SAP B1 Service Layer entity name (e.g. "BusinessPartners",
-                 "Invoices", "Orders", "Items").
+        entity:  The SAP B1 Service Layer entity name (e.g. "BusinessPartners", "Invoices", "Orders", "Items").
         table:   The underlying SAP B1 table name (e.g. "OCRD", "OINV", "ORDR", "OITM").
-        title:   A short human-readable label for the form (e.g. "Create Business Partner").
-        fields:  A list of field definitions. Each field MUST have:
-                   - name:     SAP field name exactly as the Service Layer expects (e.g. "CardCode").
-                   - label:    Human-readable label (e.g. "Customer Code").
-                   - type:     One of: "text", "number", "date", "select", "email", "phone".
-                   - required: true for mandatory fields, false for optional.
-                 Each field MAY also have:
-                   - options:  List of {"value": "...", "label": "..."} for "select" type.
-                   - default:  A pre-filled default value.
-                   - hint:     Short helper text shown under the field.
+        title:   A short human-readable label for the form (e.g. "Create Sales Order").
+        fields:  Leave this empty. The system will automatically inject the correct canonical schema.
 
-        RULES:
-        - Include ONLY mandatory fields (required: true). Skip optional fields.
-        - For fields with a known set of values (CardType, DocCurrency, etc.), use type="select"
-          and populate options with the actual valid SAP values.
-        - For CardType (BusinessPartners): options = [{value: "C", label: "Customer"}, {value: "S", label: "Vendor"}, {value: "L", label: "Lead"}].
-        - For Sales Orders (Orders) & Invoices (Invoices), the mandatory fields are:
-            * CardCode (type: text, label: "Customer Code", required: true)
-            * DocDate (type: date, label: "Posting Date", required: true, default: today's date)
-            * DocDueDate (type: date, label: "Delivery / Due Date", required: true)
-            * ItemCode (type: text, label: "Item Code", required: true)
-            * Quantity (type: number, label: "Quantity", required: true, default: 1)
-            * BPLId (type: number, label: "Branch ID (BPLId)", required: false, default: 1, hint: "Branch ID (default 1 for main branch)")
-        - For currencies, use common ones: INR, USD, EUR, AED, GBP. The default MUST be "INR" (Indian Rupee).
-        - The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
+        The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
         """
-        bus.push_form(FormPayload(
-            entity=entity,
-            table=table,
-            title=title,
-            fields=fields,
-        ))
+        from sap.form_templates import get_template_for_intent
+
+        tpl = get_template_for_intent(entity or table or title or query)
+        if tpl:
+            canonical_fields = [dict(f) for f in tpl["fields"]]
+            if fields:
+                field_map = {f.get("name"): f for f in fields if isinstance(f, dict)}
+                for cf in canonical_fields:
+                    if cf["name"] in field_map:
+                        ai_f = field_map[cf["name"]]
+                        if ai_f.get("default") is not None:
+                            cf["default"] = ai_f["default"]
+
+            form_payload = FormPayload(
+                entity=tpl["entity"],
+                table=tpl["table"],
+                title=tpl["title"],
+                fields=canonical_fields,
+            )
+        else:
+            form_payload = FormPayload(
+                entity=entity,
+                table=table,
+                title=title,
+                fields=fields,
+            )
+
+        bus.push_form(form_payload)
         return {
             "ok": True,
             "rendered_in_ui": True,
@@ -821,6 +821,24 @@ def plan_query(query: str) -> dict:
 async def _deterministic_stream(query: str, bus: ResultBus, employee_id: str):
     """No-LLM mode: still fetches real data and writes a factual summary."""
     q = query.lower()
+
+    # 1. Data entry form intents (e.g. "create customer", "add vendor", "create item", "create invoice")
+    if any(w in q for w in ("create", "add", "new", "register", "insert")) and any(
+        e in q for e in ("customer", "vendor", "supplier", "partner", "lead", "item", "product", "order", "invoice", "quotation", "quote", "po")
+    ) and not any(r in q for r in ("list", "show", "find", "how many", "top", "total", "revenue", "sum", "sales", "report")):
+        from sap.form_templates import get_template_for_intent
+        tpl = get_template_for_intent(query)
+        if tpl:
+            yield sse({"type": "status", "text": f"Rendering {tpl['title']} form…"})
+            yield sse({
+                "type": "form",
+                "entity": tpl["entity"],
+                "table": tpl["table"],
+                "title": tpl["title"],
+                "fields": tpl["fields"],
+            })
+            yield sse({"type": "chunk", "text": f"Here is the standard **{tpl['title']}** form for SAP Business One. Please fill in the details below and click **Submit to SAP**."})
+            return
 
     policy_hit = any(w in q for w in ("policy", "policies", "sop", "guideline", "allowed",
                                       "reimburse", "per diem", "approval limit"))

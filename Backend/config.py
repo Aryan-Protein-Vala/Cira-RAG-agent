@@ -84,25 +84,30 @@ HANA_EXTRA_SCHEMAS = [
     s.strip().upper() for s in _str("HANA_EXTRA_SCHEMAS", "").split(",") if s.strip()
 ]
 
-# ── Microsoft SQL Server (Alternative to HANA) ───────────────────────────────
-MSSQL_HOST = _str("MSSQL_HOST", "WSRV46076-IND")
+# ── Microsoft SQL Server (Alternative to HANA, inactive by default) ──────────
+MSSQL_HOST = _str("MSSQL_HOST", "")
 MSSQL_PORT = _int("MSSQL_PORT", 1433)
-MSSQL_USER = _str("MSSQL_USER", "sa")
-MSSQL_PASSWORD = _str("MSSQL_PASSWORD", "Ceh8=oDeT6*qivo")
-MSSQL_DATABASE = _str("MSSQL_DATABASE", "LEDURE_LIVE_300323")
+MSSQL_USER = _str("MSSQL_USER", "")
+MSSQL_PASSWORD = _str("MSSQL_PASSWORD", "")
+MSSQL_DATABASE = _str("MSSQL_DATABASE", "")
 MSSQL_CONNECT_TIMEOUT = _int("MSSQL_CONNECT_TIMEOUT", 8000)
 MSSQL_POOL_SIZE = _int("MSSQL_POOL_SIZE", 4)
 
 # ── SAP Business One Service Layer (OData) ───────────────────────────────────
 SAP_B1_HOST = _str("SAP_B1_HOST", HANA_HOST)
-SAP_B1_PORT = _int("SAP_B1_PORT", 50000)
+# SERVICE_LAYER_PORT is the HTTP/S port of the SAP B1 Service Layer (default 50000).
+# SAP_B1_PORT in .env may be set to 30013 (HANA port) — we use a dedicated variable
+# so the two ports don't collide.
+SERVICE_LAYER_PORT = _int("SERVICE_LAYER_PORT", _int("SAP_B1_SERVICE_LAYER_PORT", 50000))
+# Legacy: SAP_B1_PORT kept for backward compat but NOT used for Service Layer URL.
+SAP_B1_PORT = _int("SAP_B1_PORT", SERVICE_LAYER_PORT)
 SAP_B1_COMPANY_DB = _str("SAP_B1_COMPANY_DB", HANA_SCHEMA)
 SAP_B1_USER = _str("SAP_B1_USER", "manager")
 SAP_B1_PASSWORD = _str("SAP_B1_PASSWORD", "")
 SAP_B1_VERIFY_SSL = _bool("SAP_B1_VERIFY_SSL", False)
 SAP_B1_TIMEOUT_S = _float("SAP_B1_TIMEOUT_S", 20.0)
 SERVICE_LAYER_BASE = _str(
-    "SAP_B1_SERVICE_LAYER_URL", f"https://{SAP_B1_HOST}:{SAP_B1_PORT}/b1s/v1"
+    "SAP_B1_SERVICE_LAYER_URL", f"https://{SAP_B1_HOST}:{SERVICE_LAYER_PORT}/b1s/v1"
 ).rstrip("/")
 
 # ── Multi-Tenancy Context ────────────────────────────────────────────────────

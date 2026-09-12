@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Save, Check, X, Loader2 } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export interface FormField {
   name: string;
@@ -27,46 +27,39 @@ interface DynamicFormCardProps {
   onSuccess?: () => void;
 }
 
-const normalizeOptions = (options: any): { value: string; label: string }[] => {
-  if (!options) return [];
-  if (Array.isArray(options)) {
-    return options.map((opt) => {
-      if (typeof opt === 'string' || typeof opt === 'number') {
-        const str = String(opt);
-        if (str.toUpperCase() === 'C') return { value: 'C', label: 'Customer' };
-        if (str.toUpperCase() === 'S') return { value: 'S', label: 'Vendor' };
-        if (str.toUpperCase() === 'L') return { value: 'L', label: 'Lead' };
-        return { value: str, label: str };
-      }
-      if (typeof opt === 'object' && opt !== null) {
-        const val = opt.value ?? opt.code ?? opt.key ?? opt.id ?? opt.name ?? opt.label ?? '';
-        const lbl = opt.label ?? opt.name ?? opt.description ?? opt.title ?? opt.value ?? val;
-        return { value: String(val), label: String(lbl) };
-      }
-      return { value: String(opt), label: String(opt) };
-    });
+function getTodayMMDDYYYY(): string {
+  const d = new Date();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${month}/${day}/${year}`;
+}
+
+function formatToMMDDYYYY(val: string): string {
+  if (!val) return '';
+  const isoMatch = String(val).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${m.padStart(2, '0')}/${d.padStart(2, '0')}/${y}`;
   }
-  if (typeof options === 'object') {
-    return Object.entries(options).map(([k, v]) => ({
-      value: String(k),
-      label: typeof v === 'string' ? v : String(v),
-    }));
-  }
-  return [];
-};
+  return String(val);
+}
 
 export function DynamicFormCard({ payload, token, messageKey, onSuccess }: DynamicFormCardProps) {
   const [formData, setFormData] = useState<Record<string, any>>(() => {
     const initial: Record<string, any> = {};
-    for (const field of payload.fields || []) {
-      if (field.default !== undefined && field.default !== null && field.default !== '') {
-        initial[field.name] = field.default;
+    for (const field of payload.fields) {
+      if (field.default !== undefined) {
+        initial[field.name] = field.type === 'date' ? formatToMMDDYYYY(String(field.default)) : field.default;
       } else if (field.type === 'date') {
-        initial[field.name] = new Date().toISOString().split('T')[0];
-      } else if (field.type === 'select') {
-        const opts = normalizeOptions(field.options);
-        if (opts.length > 0) {
-          initial[field.name] = opts[0].value;
+        initial[field.name] = getTodayMMDDYYYY();
+      } else if (field.type === 'select' && field.options) {
+        if (Array.isArray(field.options) && field.options.length > 0) {
+          const first = field.options[0];
+          initial[field.name] = typeof first === 'object' && first !== null ? (first.value ?? first) : first;
+        } else if (typeof field.options === 'object') {
+          const firstKey = Object.keys(field.options)[0];
+          if (firstKey) initial[field.name] = firstKey;
         }
       }
     }
@@ -85,6 +78,31 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
   const handleChange = (name: string, value: any) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError(null);
+  };
+
+  const getNormalizedOptions = (rawOptions: any) => {
+    if (!rawOptions) return [];
+    if (Array.isArray(rawOptions)) {
+      return rawOptions.map((opt) => {
+        if (typeof opt === 'string' || typeof opt === 'number') {
+          return { value: String(opt), label: String(opt) };
+        }
+        if (typeof opt === 'object' && opt !== null) {
+          return {
+            value: String(opt.value ?? opt.code ?? opt.id ?? ''),
+            label: String(opt.label ?? opt.name ?? opt.text ?? opt.value ?? ''),
+          };
+        }
+        return { value: String(opt), label: String(opt) };
+      });
+    }
+    if (typeof rawOptions === 'object' && rawOptions !== null) {
+      return Object.entries(rawOptions).map(([k, v]) => ({
+        value: k,
+        label: typeof v === 'string' ? v : String(v),
+      }));
+    }
+    return [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,45 +176,47 @@ export function DynamicFormCard({ payload, token, messageKey, onSuccess }: Dynam
       </div>
       
       <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5 bg-white">
-        {(payload.fields || []).map((field) => {
-          const isReq = Boolean(field.required && String(field.required) !== 'false');
-          const optionsList = field.type === 'select' ? normalizeOptions(field.options) : [];
+        {payload.fields.map((field) => {
+          const isRequired = Boolean(field.required && String(field.required).toLowerCase() !== 'false');
+          const selectOptions = field.type === 'select' ? getNormalizedOptions(field.options) : [];
 
           return (
             <div key={field.name} className="flex flex-col gap-1.5">
               <label htmlFor={field.name} className="text-gray-500 text-[11px] uppercase tracking-wider font-extrabold">
-                {field.label} {isReq && <span className="text-indigo-500">*</span>}
+                {field.label} {isRequired && <span className="text-indigo-500">*</span>}
               </label>
               
               {field.type === 'select' ? (
                 <select
                   id={field.name}
-                  required={isReq}
+                  required={isRequired}
                   value={formData[field.name] ?? ''}
                   onChange={(e) => handleChange(field.name, e.target.value)}
                   className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-gray-300"
                 >
                   <option value="" disabled>Select {field.label}...</option>
-                  {optionsList.map((opt, i) => (
-                    <option key={`${opt.value}-${i}`} value={opt.value}>
-                      {opt.label}{opt.label !== opt.value && !opt.label.includes(`(${opt.value})`) ? ` (${opt.value})` : ''}
+                  {selectOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label} {opt.label !== opt.value ? `(${opt.value})` : ''}
                     </option>
                   ))}
                 </select>
               ) : (
                 <input
                   id={field.name}
-                  type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                  required={isReq}
+                  type={field.type === 'number' ? 'number' : 'text'}
+                  required={isRequired}
                   value={formData[field.name] ?? ''}
-                  onChange={(e) => handleChange(field.name, field.type === 'number' ? parseFloat(e.target.value) : e.target.value)}
-                  placeholder={`Enter ${field.label}...`}
+                  onChange={(e) => handleChange(field.name, field.type === 'number' ? (e.target.value === '' ? '' : parseFloat(e.target.value)) : e.target.value)}
+                  placeholder={field.type === 'date' ? 'MM/DD/YYYY' : `Enter ${field.label}...`}
                   className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-gray-300 placeholder:text-gray-400"
                 />
               )}
-              {field.hint && (
+              {field.hint ? (
                 <span className="text-gray-500 text-[10px] pl-1 font-medium">{field.hint}</span>
-              )}
+              ) : field.type === 'date' ? (
+                <span className="text-gray-400 text-[10px] pl-1 font-medium">Format: MM/DD/YYYY</span>
+              ) : null}
             </div>
           );
         })}

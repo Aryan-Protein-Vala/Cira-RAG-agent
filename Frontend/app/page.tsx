@@ -45,7 +45,7 @@ import { DataCard, MessageMeta } from './components/DataCard'
 import { DynamicFormCard, FormPayload } from './components/DynamicFormCard'
 import { ChartCard, ChartPayload } from './ChartCard'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 type Message = {
   role: 'user' | 'assistant'
@@ -99,12 +99,11 @@ function LoginScreen({ onLogin }: { onLogin: (user: any, token: string) => void 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employee_id: id, password, company_db: companyDb }),
       })
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}))
-        setError(detail?.detail || 'Sign-in failed. Check your credentials.')
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.token) {
+        setError(data?.detail || 'Sign-in failed. Check your credentials or ensure backend is running.')
         return
       }
-      const data = await res.json()
       onLogin(data.user, data.token)
     } catch (err) {
       setError('Cannot connect to backend server. Make sure the backend is running on port 8000.')
@@ -421,7 +420,7 @@ export default function Page() {
         headers: {
           ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
           ...(options.headers || {}),
-          Authorization: `Bearer ${sessionToken}`,
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         },
       })
       if (res.status === 401) {
@@ -442,16 +441,13 @@ export default function Page() {
 
     const savedToken = localStorage.getItem('cira-token')
     const savedEmpId = localStorage.getItem('cira-emp-id')
-    if (savedToken && savedEmpId) {
+    if (savedToken && savedEmpId && savedToken !== 'demo-token') {
       setEmployeeId(savedEmpId)
       setSessionToken(savedToken)
       setLoggedIn(true)
     } else {
-      // Default to logged in for immediate awesome experience
-      setLoggedIn(true)
-      setEmployeeId('EMP-20481')
-      setProfileName('User')
-      setSessionToken('demo-token')
+      setLoggedIn(false)
+      setSessionToken('')
     }
     setProfileName(localStorage.getItem('cira-profile-name') || 'User')
     setIsAuthLoaded(true)
@@ -466,23 +462,26 @@ export default function Page() {
 
   // Load Sessions
   useEffect(() => {
-    if (!loggedIn || !sessionToken) return
-      ; (async () => {
-        try {
-          const res = await api('/sessions')
-          const data = await res.json()
-          if (data.sessions) {
-            setSessions(data.sessions.map((s: any) => ({ id: s.id, title: s.title, date: 'Today' })))
+    if (!loggedIn || !sessionToken || sessionToken === 'demo-token') return
+    ;(async () => {
+      try {
+        const res = await api('/sessions')
+        if (res.ok) {
+          const data = await res.json().catch(() => null)
+          if (data?.sessions && Array.isArray(data.sessions)) {
+            setSessions(data.sessions.map((s: any) => ({ id: s.id, title: s.title || 'Untitled', date: 'Today' })))
+            return
           }
-        } catch {
-          // demo fallback sessions
-          setSessions([
-            { id: 's1', title: 'Top candidates for SAP ABAP', date: 'Today' },
-            { id: 's2', title: 'Q2 Open Invoices by Vendor', date: 'Yesterday' },
-            { id: 's3', title: 'Sales revenue breakdown 2026', date: 'Last week' },
-          ])
         }
-      })()
+      } catch {
+        // backend loading or session error
+      }
+      setSessions([
+        { id: 's1', title: 'Top candidates for SAP ABAP', date: 'Today' },
+        { id: 's2', title: 'Q2 Open Invoices by Vendor', date: 'Yesterday' },
+        { id: 's3', title: 'Sales revenue breakdown 2026', date: 'Last week' },
+      ])
+    })()
   }, [loggedIn, sessionToken, api])
 
   const handleScroll = () => {
@@ -592,20 +591,24 @@ export default function Page() {
             const response = await fetch(`${API_BASE}/transcribe`, {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${sessionToken}`,
+                ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
               },
               body: formData,
             })
-            const data = await response.json()
-          if (data.text) {
-            setInput(existingInputRef.current ? existingInputRef.current + ' ' + data.text : data.text)
+            if (response.ok) {
+              const data = await response.json().catch(() => null)
+              if (data?.text) {
+                setInput(existingInputRef.current ? existingInputRef.current + ' ' + data.text : data.text)
+              }
+            } else {
+              showToast('Audio transcription unavailable', 'error')
+            }
+          } catch (err) {
+            console.error('Groq transcription error:', err)
+            showToast('Failed to transcribe audio', 'error')
+          } finally {
+            setIsTranscribing(false)
           }
-        } catch (err) {
-          console.error('Groq transcription error:', err)
-          showToast('Failed to transcribe audio', 'error')
-        } finally {
-          setIsTranscribing(false)
-        }
       }
 
       mediaRecorder.start()
@@ -642,11 +645,14 @@ export default function Page() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: value }),
       })
-      .then(res => res.json())
-      .then(data => {
-         if (data.title) {
+      .then(async (res) => {
+        if (!res.ok) return null
+        return res.json().catch(() => null)
+      })
+      .then((data) => {
+         if (data?.title) {
             setActiveTitle(data.title)
-            setSessions(cur => cur.map(s => s.id === currentSessionId ? { ...s, title: data.title } : s))
+            setSessions((cur) => cur.map((s) => (s.id === currentSessionId ? { ...s, title: data.title } : s)))
             api(`/session/${currentSessionId}`, {
                method: 'PUT',
                headers: { 'Content-Type': 'application/json' },
@@ -845,18 +851,24 @@ export default function Page() {
 
     try {
       const res = await api(`/history/${encodeURIComponent(id)}`)
-      const data = await res.json()
-      setMessages(
-        (data.messages || []).map((m: any) => ({
-          role: m.role,
-          content: m.content,
-          data: m.data,
-          entity: m.entity,
-          meta: m.meta,
-          chart: m.chart,
-          form: m.form,
-        }))
-      )
+      if (res.ok) {
+        const data = await res.json().catch(() => null)
+        if (data?.messages) {
+          setMessages(
+            data.messages.map((m: any) => ({
+              role: m.role,
+              content: m.content,
+              data: m.data,
+              entity: m.entity,
+              meta: m.meta,
+              chart: m.chart,
+              form: m.form,
+              timestamp: m.timestamp,
+            }))
+          )
+          return
+        }
+      }
     } catch {
       // demo messages
       setMessages([
@@ -899,7 +911,7 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#fafafa] select-none font-sans relative p-0 md:p-4 md:gap-4">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#fafafa] font-sans relative p-0 md:p-4 md:gap-4">
 
       {/* ── Mobile Sidebar Overlay Backdrop ── */}
       {isMobileSidebarOpen && (
