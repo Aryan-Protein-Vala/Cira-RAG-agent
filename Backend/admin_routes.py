@@ -2,21 +2,30 @@ import asyncio
 import socket
 import uuid
 from typing import Any, List, Optional
-from passlib.context import CryptContext
+
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db, Partner, Tenant, SuperAdmin, UsageLog
-from auth import create_token, validate_and_extract, bearer_scheme
+from auth import create_token, require_role, validate_and_extract, bearer_scheme
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ── Password hashing ────────────────────────────────────────────────────────
+# Delegated to passwords.py. See that module for why passlib was removed: on a
+# clean install passlib 1.7.4 + bcrypt >= 4.1 raised ValueError, so partner and
+# superadmin passwords could not be created or verified at all.
+from passwords import hash_password as get_password_hash  # noqa: E402
+from passwords import verify_password  # noqa: E402
+
 
 # ── Pydantic Request Models ────────────────────────────────────────────────
 class AdminLoginRequest(BaseModel):
     username: str
     password: str
+
 
 class PartnerCreate(BaseModel):
     name: str
@@ -77,19 +86,7 @@ class TenantResponse(BaseModel):
         from_attributes = True
 
 # ── Authentication Helper ──────────────────────────────────────────────────
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-def require_role(roles_needed: List[str]):
-    def role_checker(ctx: dict = Depends(validate_and_extract)):
-        user_roles = ctx.get("roles", [])
-        if not any(r in user_roles for r in roles_needed):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-        return ctx
-    return role_checker
+# `require_role` now lives in auth.py so write endpoints can share it.
 
 # ── SuperAdmin Routes ──────────────────────────────────────────────────────
 @router.post("/superadmin/login")

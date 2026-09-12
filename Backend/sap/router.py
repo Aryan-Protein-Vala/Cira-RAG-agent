@@ -616,6 +616,55 @@ def _create_entity_sync(table_or_entity: str, data: dict) -> dict:
     return sl.create_entity(table_or_entity, data)
 
 
+def _update_entity_sync(table_or_entity: str, key_field: str, key_value: str, data: dict) -> dict:
+    """Correct an existing record. Same write gate as create_entity."""
+    from config import CURRENT_TENANT
+    tenant = CURRENT_TENANT.get() or {}
+    if not tenant.get("WRITE_ENABLED", False):
+        from .types_ import SapDataError
+        raise SapDataError("Write operations are disabled for this tenant.")
+
+    backend = get_active_backend()
+    if backend.simulated:
+        return backend.update_entity(table_or_entity, key_field, key_value, data)
+
+    sl = ServiceLayerBackend()
+    probe = sl.ping()
+    if not probe.get("ok"):
+        from .types_ import SapDataError
+        raise SapDataError(
+            f"SAP B1 Service Layer is unreachable for write operations: {probe.get('error')}. "
+            "Please ensure port 50000 is open/tunneled."
+        )
+    return sl.update_entity(table_or_entity, key_field, key_value, data)
+
+
+async def update_entity(table_or_entity: str, key_field: str, key_value: str, data: dict) -> dict:
+    """Update an existing Service Layer record (master data only).
+
+    Kept as master-data-only on purpose: financial documents must go through the
+    Drafts entity so a human approves them inside SAP Business One. Never
+    UPDATE a B1 table directly - that skips number ranges, credit limits, tax
+    determination and journal creation.
+    """
+    from audit import audit_log
+    from ratelimit import check_rate_limit
+    from config import CURRENT_TENANT
+    tenant = CURRENT_TENANT.get() or {}
+    tenant_id = tenant.get("SAP_B1_COMPANY_DB") or tenant.get("HANA_SCHEMA") or "default"
+
+    try:
+        check_rate_limit(tenant_id, "write")
+        res = await asyncio.to_thread(_update_entity_sync, table_or_entity, key_field, key_value, data)
+        audit_log("update_entity", {"entity": table_or_entity, "key_field": key_field,
+                                    "key_value": key_value, "fields": sorted(data)}, "success")
+        return res
+    except Exception as e:
+        audit_log("update_entity", {"entity": table_or_entity, "key_field": key_field,
+                                    "key_value": key_value, "fields": sorted(data)}, "error", str(e))
+        raise
+
+
 async def create_entity(table_or_entity: str, data: dict) -> dict:
     from audit import audit_log
     from ratelimit import check_rate_limit
@@ -645,4 +694,5 @@ __all__ = [
     "run_query",
     "run_sql",
     "search_schema",
+    "update_entity",
 ]

@@ -67,7 +67,9 @@ GROQ_API_KEY = _str("GROQ_API_KEY")
 DATA_SOURCE = _str("CIRA_DATA_SOURCE", "auto").lower()
 
 # ── SAP HANA (direct SQL — this is the "deep" path) ──────────────────────────
-HANA_HOST = _str("HANA_HOST", _str("SAP_B1_HOST", "20.204.5.237"))
+# No baked-in default host: shipping a real customer/server address as a default
+# leaks infrastructure and silently points new installs at somebody else's box.
+HANA_HOST = _str("HANA_HOST", _str("SAP_B1_HOST", ""))
 HANA_PORT = _int("HANA_PORT", 30013)
 HANA_USER = _str("HANA_USER", "SYSTEM")
 HANA_PASSWORD = _str("HANA_PASSWORD", "")
@@ -164,14 +166,24 @@ TOKEN_TTL_SECONDS = _int("CIRA_TOKEN_TTL_SECONDS", 12 * 3600)
 # Demo/bootstrap credentials.  In production point CIRA_USERS at a JSON map or
 # wire validate_credentials() to your IdP / SAP OUSR table.
 ADMIN_ID = _str("CIRA_ADMIN_ID", "admin")
-ADMIN_PASSWORD = _str("CIRA_ADMIN_PASSWORD", "asdfghjkl;")
-# When true any non-empty employee id + password is accepted (demo mode).
-ALLOW_ANY_EMPLOYEE = _bool("CIRA_ALLOW_ANY_EMPLOYEE", True)
+# No default password. An empty value means the admin bootstrap account is
+# DISABLED until you set one (see auth.authenticate).
+ADMIN_PASSWORD = _str("CIRA_ADMIN_PASSWORD", "")
+# When true ANY non-empty employee id + password is accepted (demo mode).
+# Default is False: an auth bypass must be opt-in, never the shipped default.
+# (This previously defaulted to True while .env.example said False - so a
+#  deployment that copied the example still ran wide open.)
+ALLOW_ANY_EMPLOYEE = _bool("CIRA_ALLOW_ANY_EMPLOYEE", False)
 
 # ── HTTP / CORS ──────────────────────────────────────────────────────────────
 _origins = _str("CIRA_ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = [o.strip() for o in _origins.split(",") if o.strip()]
-ALLOW_ORIGIN_REGEX = _str("CIRA_ALLOWED_ORIGIN_REGEX", "" if ALLOWED_ORIGINS else ".*")
+# Dev convenience is limited to loopback. A "*"-style regex combined with
+# allow_credentials=True lets ANY website call this API with the user's token.
+ALLOW_ORIGIN_REGEX = _str(
+    "CIRA_ALLOWED_ORIGIN_REGEX",
+    "" if ALLOWED_ORIGINS else r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+)
 
 # ── Storage ──────────────────────────────────────────────────────────────────
 DATA_DIR = Path(_str("CIRA_DATA_DIR", str(BASE_DIR / "data")))
@@ -187,6 +199,27 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 LOG_LEVEL = _str("CIRA_LOG_LEVEL", "INFO").upper()
 SCHEMA_CACHE_TTL_S = _int("CIRA_SCHEMA_CACHE_TTL_S", 900)
 
+# ── ERP rate limits ─────────────────────────────────────────────────────────
+# Per-tenant guard rails in front of the ERP. The old hard-coded default of
+# 60 reads/hour made the assistant unusable for a 40-user company (one user
+# could exhaust it in ten minutes).
+RATE_LIMIT_READS_PER_HR = _int("CIRA_RATE_LIMIT_READS_PER_HR", 3000)
+RATE_LIMIT_WRITES_PER_HR = _int("CIRA_RATE_LIMIT_WRITES_PER_HR", 100)
+RATE_LIMIT_WINDOW_S = _int("CIRA_RATE_LIMIT_WINDOW_S", 3600)
+
+# ── Localisation ────────────────────────────────────────────────────────────
+# Currency used when the assistant formats money. Never hard-code INRupee:
+# the same build serves Dubai, London and Sao Paulo.
+CURRENCY_CODE = _str("CIRA_CURRENCY_CODE", "INR")
+CURRENCY_SYMBOL = _str("CIRA_CURRENCY_SYMBOL", "")
+LOCALE = _str("CIRA_LOCALE", "en-IN")
+
+# ── Write safety ────────────────────────────────────────────────────────────
+# Writes are always routed through the Service Layer as Drafts and require
+# an explicit approval action; this switch only governs whether the draft
+# endpoint is reachable at all.
+ALLOW_WRITES = _bool("CIRA_ALLOW_WRITES", False)
+
 
 def summary() -> dict:
     """Non-secret snapshot of the effective configuration (used by /health)."""
@@ -199,6 +232,12 @@ def summary() -> dict:
             "user": HANA_USER,
             "encrypt": HANA_ENCRYPT,
             "credentials_configured": bool(HANA_PASSWORD),
+        },
+        "safety": {
+            "writes_enabled": ALLOW_WRITES,
+            "allow_any_employee": ALLOW_ANY_EMPLOYEE,
+            "admin_bootstrap_configured": bool(ADMIN_PASSWORD),
+            "allowed_origins": ALLOWED_ORIGINS or ALLOW_ORIGIN_REGEX,
         },
         "service_layer": {
             "base_url": SERVICE_LAYER_BASE,

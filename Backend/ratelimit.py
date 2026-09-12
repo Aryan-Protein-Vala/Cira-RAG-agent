@@ -4,10 +4,23 @@ from fastapi import HTTPException
 from collections import defaultdict
 import threading
 
-# Configurable limits (Task specification: 60 reads/hr, 20 writes/hr)
-READ_LIMIT_PER_HR = int(os.getenv("CIRA_RATE_LIMIT_READS_PER_HR", "60"))
-WRITE_LIMIT_PER_HR = int(os.getenv("CIRA_RATE_LIMIT_WRITES_PER_HR", "20"))
-WINDOW_SECONDS = int(os.getenv("CIRA_RATE_LIMIT_WINDOW_S", "3600"))
+# Per-tenant limits in front of the ERP.
+#
+# These used to be hard-coded at 60 reads/hour and 20 writes/hour. For a 40-user
+# manufacturer that is roughly 0.3 questions per user per hour: the assistant
+# would start refusing normal work after ten minutes of one person using it. The
+# defaults now live in config.py and are sized for a real company; tighten them
+# per tenant if a client's HANA box is small.
+#
+# KNOWN LIMITATION (documented, not hidden): this limiter is in-process. It is
+# correct for the single-worker deployment we ship, and it resets when the
+# process restarts. If you ever run multiple workers, move it to the shared
+# SQLite/Redis store or the limits will be per-worker.
+import config as _config
+
+READ_LIMIT_PER_HR = int(os.getenv("CIRA_RATE_LIMIT_READS_PER_HR", "") or _config.RATE_LIMIT_READS_PER_HR)
+WRITE_LIMIT_PER_HR = int(os.getenv("CIRA_RATE_LIMIT_WRITES_PER_HR", "") or _config.RATE_LIMIT_WRITES_PER_HR)
+WINDOW_SECONDS = int(os.getenv("CIRA_RATE_LIMIT_WINDOW_S", "") or _config.RATE_LIMIT_WINDOW_S)
 
 class RateLimitError(HTTPException):
     """Specific exception for ERP tenant rate limits, allowing caller disambiguation."""

@@ -1,33 +1,33 @@
-{"id": 1, "bucket": "simple", "question": "Show me all open invoices for Earthshaker Corporation.", "expected_tables": ["OINV"], "expected_columns": ["CardName", "DocStatus"], "hallucination_trap": false}
-{"id": 2, "bucket": "simple", "question": "List all business partners in California.", "expected_tables": ["OCRD", "CRD1"], "expected_columns": ["State"], "hallucination_trap": false}
-{"id": 3, "bucket": "simple", "question": "What is the stock level for item A00001?", "expected_tables": ["OITM", "OITW"], "expected_columns": ["ItemCode", "OnHand"], "hallucination_trap": false}
-{"id": 4, "bucket": "simple", "question": "Find all purchase orders placed in the last 30 days.", "expected_tables": ["OPOR"], "expected_columns": ["DocDate"], "hallucination_trap": false}
-{"id": 5, "bucket": "simple", "question": "Who is the sales employee for customer Maxi-Teq?", "expected_tables": ["OCRD", "OSLP"], "expected_columns": ["CardName", "SlpName"], "hallucination_trap": false}
-{"id": 6, "bucket": "simple", "question": "Show me all active items in the Printers item group.", "expected_tables": ["OITM", "OITB"], "expected_columns": ["validFor", "ItmsGrpNam"], "hallucination_trap": false}
-{"id": 7, "bucket": "aggregate", "question": "What is the total revenue by item group this year?", "expected_tables": ["OINV", "INV1", "OITM", "OITB"], "expected_columns": ["ItmsGrpNam", "LineTotal"], "hallucination_trap": false}
-{"id": 8, "bucket": "aggregate", "question": "Show top 5 customers by sales volume in 2023.", "expected_tables": ["OINV"], "expected_columns": ["CardName", "DocTotal"], "hallucination_trap": false}
-{"id": 9, "bucket": "aggregate", "question": "What is the total value of open purchase orders?", "expected_tables": ["OPOR"], "expected_columns": ["DocStatus", "DocTotal"], "hallucination_trap": false}
-{"id": 10, "bucket": "aggregate", "question": "Count the number of sales orders per month for the last 6 months.", "expected_tables": ["ORDR"], "expected_columns": ["DocDate", "DocEntry"], "hallucination_trap": false}
-{"id": 11, "bucket": "aggregate", "question": "What is the average discount given on invoices?", "expected_tables": ["OINV"], "expected_columns": ["DiscPrcnt"], "hallucination_trap": false}
-{"id": 12, "bucket": "aggregate", "question": "Total inventory value by warehouse.", "expected_tables": ["OITW", "OITM"], "expected_columns": ["WhsCode", "AvgPrice", "OnHand"], "hallucination_trap": false}
-{"id": 13, "bucket": "ambiguous", "question": "Show me the invoices.", "expected_clarification": true, "hallucination_trap": false}
-{"id": 14, "bucket": "ambiguous", "question": "Give me a list of products.", "expected_clarification": true, "hallucination_trap": false}
-{"id": 15, "bucket": "ambiguous", "question": "How much did we sell?", "expected_clarification": true, "hallucination_trap": false}
-{"id": 16, "bucket": "ambiguous", "question": "Who are our best vendors?", "expected_clarification": true, "hallucination_trap": false}
-{"id": 17, "bucket": "hallucination", "question": "What is the capital of France?", "expected_rejection": true, "hallucination_trap": true}
-{"id": 18, "bucket": "hallucination", "question": "Show me the employee salaries from the confidential HR table.", "expected_rejection": true, "hallucination_trap": true}
-{"id": 19, "bucket": "hallucination", "question": "List the top 5 competitors of SAP.", "expected_rejection": true, "hallucination_trap": true}
-{"id": 20, "bucket": "hallucination", "question": "Show me the recipe for Coca Cola.", "expected_rejection": true, "hallucination_trap": true}
+{"id": 1, "bucket": "simple", "question": "Show me all open invoices for Earthshaker Corporation.", "expected_tables": ["OINV"], "expected_columns": ["CardName", "DocStatus"]}
+{"id": 2, "bucket": "simple", "question": "List all business partners in California.", "expected_tables": ["OCRD", "CRD1"], "expected_columns": ["State"]}
+{"id": 3, "bucket": "simple", "question": "What is the stock level for item A00001?", "expected_tables": ["OITM", "OITW"], "expected_columns": ["ItemCode", "OnHand"]}
+{"id": 4, "bucket": "simple", "question": "Find all purchase orders placed in the last 30 days.", "expected_tables": ["OPOR"], "expected_columns": ["DocDate"]}
+{"id": 5, "bucket": "simple", "question": "Who is the sales employee for customer Maxi-Teq?", "expected_tables": ["OCRD", "OSLP"], "expected_columns": ["CardName", "SlpName"]}
+{"id": 6, "bucket": "simple", "question": "Show me all active items in the Printers item group.", "expected_tables": ["OITM", "OITB"], "expected_columns": ["validFor", "ItmsGrpNam"]}
+{"id": 7, "bucket": "aggregate", "question": "What is the total revenue by item group this year?", "expected_tables": ["OINV", "INV1", "OITM", "OITB"], "expected_columns": ["ItmsGrpNam", "LineTotal"]}
+{"id": 8, "bucket": "aggregate", "question": "Show top 5 customers by sales volume in 2023.", "expected_tables": ["OINV"], "expected_columns": ["CardName", "DocTotal"]}
+{"id": 9, "bucket": "aggregate", "question": "What is the total value of open purchase orders?", "expected_tables": ["OPOR"], "expected_columns": ["DocStatus", "DocTotal"]}
+{"id": 10, "bucket": "aggregate", "question": "Count the number of sales orders per month for the last 6 months.", "expected_tables": ["ORDR"], "expected_columns": ["DocDate", "DocEntry"]}
+{"id": 11, "bucket": "aggregate", "question": "What is the average discount given on invoices?", "expected_tables": ["OINV"], "expected_columns": ["DiscPrcnt"]}
+{"id": 12, "bucket": "aggregate", "question": "Total inventory value by warehouse.", "expected_tables": ["OITW", "OITM"], "expected_columns": ["WhsCode", "AvgPrice", "OnHand"]}
+{"id": 13, "bucket": "ambiguous", "question": "Show me the invoices.", "expected_clarification": true}
+{"id": 14, "bucket": "ambiguous", "question": "Give me a list of products.", "expected_clarification": true}
+{"id": 15, "bucket": "ambiguous", "question": "How much did we sell?", "expected_clarification": true}
+{"id": 16, "bucket": "ambiguous", "question": "Who are our best vendors?", "expected_clarification": true}
+{"id": 17, "bucket": "hallucination", "question": "What is the capital of France?", "expected_rejection": true}
+{"id": 18, "bucket": "hallucination", "question": "Show me the employee salaries from the confidential HR table.", "expected_rejection": true}
+{"id": 19, "bucket": "hallucination", "question": "List the top 5 competitors of SAP.", "expected_rejection": true}
+{"id": 20, "bucket": "hallucination", "question": "Show me the recipe for Coca Cola.", "expected_rejection": true}
 {"id": 21, "bucket": "complex_joins", "question": "Show all sales orders along with their corresponding customer names and item details.", "expected_tables": ["ORDR", "OCRD", "RDR1"]}
 {"id": 22, "bucket": "complex_joins", "question": "List the purchase orders, the vendor names, and the warehouse they are delivered to.", "expected_tables": ["OPOR", "OCRD", "POR1", "OWHS"]}
 {"id": 23, "bucket": "complex_joins", "question": "What items have been sold to customer 'C20000' and who was the sales employee?", "expected_tables": ["ORDR", "RDR1", "OHEM", "OITM"]}
 {"id": 24, "bucket": "complex_joins", "question": "Find all invoices that have items belonging to the 'Printers' item group.", "expected_tables": ["OINV", "INV1", "OITM", "OITB"]}
 {"id": 25, "bucket": "complex_joins", "question": "Show the total quantity of 'A00001' ordered by 'Earthshaker Corporation'.", "expected_tables": ["ORDR", "RDR1", "OCRD"]}
-{"id": 26, "bucket": "aggregates", "question": "What is the total sales amount for each sales employee?", "expected_tables": ["OINV", "OHEM", "OSLP"]}
-{"id": 27, "bucket": "aggregates", "question": "Count the number of active items in each item group.", "expected_tables": ["OITM", "OITB"]}
-{"id": 28, "bucket": "aggregates", "question": "Find the average order value per customer.", "expected_tables": ["ORDR", "OCRD"]}
-{"id": 29, "bucket": "aggregates", "question": "What is the maximum discount given on any invoice?", "expected_tables": ["OINV"]}
-{"id": 30, "bucket": "aggregates", "question": "Calculate the total inventory value by warehouse.", "expected_tables": ["OITW", "OITM", "OWHS"]}
+{"id": 26, "bucket": "aggregate", "question": "What is the total sales amount for each sales employee?", "expected_tables": ["OINV", "OHEM", "OSLP"]}
+{"id": 27, "bucket": "aggregate", "question": "Count the number of active items in each item group.", "expected_tables": ["OITM", "OITB"]}
+{"id": 28, "bucket": "aggregate", "question": "Find the average order value per customer.", "expected_tables": ["ORDR", "OCRD"]}
+{"id": 29, "bucket": "aggregate", "question": "What is the maximum discount given on any invoice?", "expected_tables": ["OINV"]}
+{"id": 30, "bucket": "aggregate", "question": "Calculate the total inventory value by warehouse.", "expected_tables": ["OITW", "OITM", "OWHS"]}
 {"id": 31, "bucket": "time_series", "question": "How many purchase orders were created in Q1 2023?", "expected_tables": ["OPOR"]}
 {"id": 32, "bucket": "time_series", "question": "Show the monthly revenue trend for the last year.", "expected_tables": ["OINV"]}
 {"id": 33, "bucket": "time_series", "question": "Which customers placed orders yesterday?", "expected_tables": ["ORDR", "OCRD"]}

@@ -81,13 +81,25 @@ def has_row_limit(sql: str) -> bool:
 
 
 def apply_row_limit(sql: str, limit: int, dialect: str) -> str:
-    """Force a row cap onto a statement that does not already have one."""
+    """Force a row cap onto a statement that does not already have one.
+
+    Dialects differ and getting this wrong is not cosmetic: `LIMIT` is a syntax
+    error on Microsoft SQL Server, which is the database behind most Business One
+    installs, so a wrapped statement used to fail the whole query on exactly the
+    customers who could not use HANA.
+    """
     if limit <= 0 or has_row_limit(sql):
         return sql
-    if dialect == "sqlite":
-        return f"{sql}\nLIMIT {int(limit)}"
-    # HANA: wrap so we never fight with the author's ORDER BY / UNION
-    return f"SELECT * FROM (\n{sql}\n) LIMIT {int(limit)}"
+    if dialect == "sqlite" or dialect == "hana":
+        # HANA and SQLite both accept a trailing LIMIT. Wrapping keeps the
+        # author's ORDER BY / UNION intact.
+        return f"SELECT * FROM (\n{sql}\n) LIMIT {int(limit)}"
+    if dialect == "mssql":
+        # T-SQL has no LIMIT. OFFSET/FETCH requires ORDER BY, so use TOP inside a
+        # derived table, which is valid for any SELECT (including UNION).
+        return f"SELECT TOP {int(limit)} * FROM (\n{sql}\n) AS _cira_capped"
+    # Unknown dialect: fail loudly rather than emit something the server rejects.
+    raise SapDataError(f"No row-limit syntax known for dialect '{dialect}'.")
 
 
 # ── HANA -> SQLite translation (offline simulator only) ──────────────────────

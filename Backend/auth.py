@@ -134,24 +134,70 @@ def validate_and_extract(credentials: HTTPAuthorizationCredentials = Depends(bea
     tenant_config = config.MOCK_TENANTS.get(company_db)
     if tenant_config:
         config.CURRENT_TENANT.set(tenant_config)
-        
+    else:
+        # Fail closed. CURRENT_TENANT is a ContextVar that is *reused* across
+        # requests on the same worker - previously, an unknown company_db left the
+        # previous request's SAP credentials in place, so a user could read
+        # another tenant's data simply by asking for a company that is not in
+        # MOCK_TENANTS. Reset it and let the request-scoped tenant resolver
+        # (main.set_tenant_context) decide what to do.
+        config.CURRENT_TENANT.set(None)
+
     return payload
 
 
+def require_role(roles_needed: list[str]):
+    """FastAPI dependency factory: allow only the listed roles.
+
+    Lives here (not in admin_routes) because migration_routes.py - and any
+    future write endpoint - needs the same check, and importing it from
+    admin_routes created a fragile, one-directional dependency that broke
+    outright: `from auth import require_role` raised ImportError at startup.
+    """
+    def role_checker(ctx: dict = Depends(validate_and_extract)) -> dict:
+        user_roles = ctx.get("roles", [])
+        if not any(r in user_roles for r in roles_needed):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        return ctx
+    return role_checker
+
+
 def authenticate(employee_id: str, password: str, company_db: str = "") -> dict | None:
-    """Validate sign-in credentials."""
+    """Validate sign-in credentials.
+
+    Two hard rules, both of which the previous build broke:
+
+    1. There is NO built-in password. If ``CIRA_ADMIN_PASSWORD`` is unset the
+       admin bootstrap account simply cannot be used, instead of silently
+       accepting a hard-coded default that shipped in the source tree.
+    2. ``CIRA_ALLOW_ANY_EMPLOYEE`` defaults to False. Accepting any id with any
+       password is a demo convenience, not a default, so it has to be turned on
+       deliberately and it is reported by /health.
+    """
     employee_id = (employee_id or "").strip()
     if not employee_id or not password:
         return None
 
     if employee_id.lower() == config.ADMIN_ID.lower():
+        if not config.ADMIN_PASSWORD:
+            log.error(
+                "Sign-in attempted for the admin bootstrap account but "
+                "CIRA_ADMIN_PASSWORD is not set - refusing. Set it in Backend/.env."
+            )
+            return None
         if hmac.compare_digest(password, config.ADMIN_PASSWORD):
             return {"employee_id": "ADMIN-001", "name": "System Admin",
                     "roles": ["admin", "employee"], "company_db": company_db or config.SAP_B1_COMPANY_DB}
         return None
 
     if config.ALLOW_ANY_EMPLOYEE:
-        return {"employee_id": employee_id, "name": employee_id, "roles": ["employee"], "company_db": company_db or config.SAP_B1_COMPANY_DB}
+        log.warning(
+            "CIRA_ALLOW_ANY_EMPLOYEE is ON - accepting %r with any password. "
+            "This is demo mode; turn it off before a client sees this system.",
+            employee_id,
+        )
+        return {"employee_id": employee_id, "name": employee_id, "roles": ["employee"],
+                "company_db": company_db or config.SAP_B1_COMPANY_DB}
     return None
 
 

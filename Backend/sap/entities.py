@@ -172,8 +172,12 @@ PREFERRED_COLUMNS: dict[str, list[str]] = {
              "LineTotal", "WhsCode"],
     "OCRD": ["CardCode", "CardName", "CardType", "GroupCode", "Balance", "Phone1",
              "E_Mail", "City", "Country", "Currency", "validFor", "CreateDate"],
-    "OITM": ["ItemCode", "ItemName", "ItemType", "ItmsGrpCod", "OnHand", "IsCommited",
-             "OnOrder", "AvgPrice", "LastPurPrc", "InvntItem", "validFor"],
+    # NOTE: OITM has NO OnHand / IsCommited / OnOrder columns - stock lives in
+    # OITW. Listing them here made `describe_table("items")` promise columns that
+    # the catalog then refused, and made the chart picker fall back to a random
+    # numeric column. Ask for stock by warehouse (OITW) instead.
+    "OITM": ["ItemCode", "ItemName", "ItemType", "ItmsGrpCod", "ItmsGrpNam", "AvgPrice",
+             "LastPurPrc", "InvntItem", "validFor", "CreateDate", "UserText"],
     "OITW": ["ItemCode", "WhsCode", "OnHand", "IsCommited", "OnOrder", "AvgPrice"],
     "OWHS": ["WhsCode", "WhsName", "City", "Country", "Inactive"],
     "OHEM": ["empID", "firstName", "lastName", "jobTitle", "dept", "branch", "salary",
@@ -202,7 +206,8 @@ SEMANTICS: dict[str, dict[str, str]] = {
     "ORCT": {"date": "DocDate", "amount": "DocTotal", "party": "CardName", "key": "DocNum"},
     "OVPM": {"date": "DocDate", "amount": "DocTotal", "party": "CardName", "key": "DocNum"},
     "OCRD": {"date": "CreateDate", "amount": "Balance", "party": "CardName", "key": "CardCode"},
-    "OITM": {"date": "CreateDate", "amount": "OnHand", "party": "ItemName", "key": "ItemCode"},
+    # amount must be a column that actually exists on OITM (see note above).
+    "OITM": {"date": "CreateDate", "amount": "AvgPrice", "party": "ItemName", "key": "ItemCode"},
     "OITW": {"amount": "OnHand", "party": "WhsCode", "key": "ItemCode"},
     "OHEM": {"date": "startDate", "amount": "salary", "party": "lastName", "key": "empID"},
     "JDT1": {"date": "RefDate", "amount": "Debit", "party": "AcctName", "key": "TransId"},
@@ -216,7 +221,9 @@ SEMANTICS: dict[str, dict[str, str]] = {
 
 # One-letter codes SAP B1 stores -> words.  (column name is matched case-insensitively)
 CODE_MAPS: dict[str, dict[str, str]] = {
-    "docstatus": {"O": "Open", "C": "Closed", "L": "Closed", "D": "Draft", "P": "Paid"},
+    # B1 stores DocStatus as 'O' (open) or 'C' (closed) only. Creating a row for
+    # OITM did not exist at all here, so we add OITW's own semantics.
+    "docstatus": {"O": "Open", "C": "Closed"},
     "canceled": {"Y": "Cancelled", "N": "Active", "C": "Cancellation"},
     "cardtype": {"C": "Customer", "S": "Vendor", "L": "Lead"},
     "itemtype": {"I": "Item", "L": "Labor", "T": "Travel", "F": "Fixed Asset"},

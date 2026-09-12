@@ -311,6 +311,30 @@ class ServiceLayerBackend(DataBackend):
             return resp.json() if resp.text else {}
         raise SapUnavailableError("Service Layer authentication kept failing.")
 
+    def _patch(self, path: str, data: dict) -> dict:
+        """PATCH an existing entity.
+
+        Added because the migration path used to fake updates: it checked
+        whether a business partner existed and then just counted it as a
+        success without changing anything. A re-push is only meaningful if it
+        can actually correct the row that failed.
+        """
+        cookies = self._login()
+        url = path if path.startswith("http") else f"{self.base}/{path.lstrip('/')}"
+        for attempt in range(2):
+            with self._client(cookies) as client:
+                # SAP requires the If-Match header; * means "overwrite regardless".
+                resp = client.patch(url, json=data, headers={"If-Match": "*"})
+            if resp.status_code == 401 and attempt == 0:
+                cookies = self._login(force=True)
+                continue
+            if resp.status_code >= 400:
+                raise SapDataError(
+                    f"Service Layer update error {resp.status_code}: {resp.text[:300]}"
+                )
+            return resp.json() if resp.text else {}
+        raise SapUnavailableError("Service Layer authentication kept failing.")
+
     # ── interface ────────────────────────────────────────────────────────────
     def ping(self) -> dict:
         started = time.time()
@@ -437,8 +461,13 @@ class ServiceLayerBackend(DataBackend):
         columns = list(rows[0].keys()) if rows else (select or [])
         return columns, rows
 
-    # SAP document type codes for SeriesService — maps Service Layer entity → NNM1.ObjectCode
-    # https://help.sap.com/docs/SAP_BUSINESS_ONE_SERVICE_LAYER
+    # SAP object type codes (NNM1.ObjectCode / the numeric `DocObjectCode`).
+    # SAP's own Service Layer API Reference uses these numbers, not names:
+    #   POST /b1s/v1/Drafts  { "CardCode": "c001", "DocObjectCode": "23", ... }   <- quotation
+    #   POST /b1s/v1/StockTransferDrafts { "DocObjectCode": "67", ... }           <- stock transfer
+    # Source: "sap layer reference.md" (SAP Business One Service Layer API Reference,
+    # OData v4), Drafts / DraftsService_GetApprovalTemplates / StockTransferDrafts.
+    # They are also what SeriesService_GetDocumentSeries expects in DocumentTypeParams.
     ENTITY_SERIES_DOC_TYPE: dict[str, str] = {
         "BusinessPartners": "2",
         "Items": "4",
@@ -537,14 +566,76 @@ class ServiceLayerBackend(DataBackend):
                     payload["Series"] = -1
                     log.debug("Auto-injected Series=-1 (Manual) for Master Data %s", entity)
 
-        # ── Draft-First Writes ──
+        # ── Draft-First Writes ──────────────────────────────────────────────
+        # POST /b1s/v1/Drafts creates a *preliminary* document that a human still
+        # has to approve inside B1 - which is exactly the guarantee we sell.
+        #
+        # BUG (fixed): this used to send DocObjectCode = "oOrders" / "oInvoices".
+        # SAP's own Service Layer API Reference shows DocObjectCode carrying the
+        # NUMERIC object type ("23" for a quotation, "67" for a stock transfer),
+        # so every draft-post for a sales order / invoice / PO came back as an
+        # error and no draft was ever created on a live system.
         if is_draft and entity != "Drafts":
-            payload["DocObjectCode"] = f"o{entity}"
-            log.info("Routing write for %s to Drafts (DocObjectCode: %s)", entity, payload["DocObjectCode"])
+            object_code = self.ENTITY_SERIES_DOC_TYPE.get(entity)
+            if not object_code:
+                raise SapDataError(
+                    f"No SAP object type code is known for '{entity}', so it cannot be "
+                    "created as a draft. Add it to ENTITY_SERIES_DOC_TYPE."
+                )
+            payload["DocObjectCode"] = object_code
+            log.info("Routing write for %s to Drafts (DocObjectCode=%s)", entity, object_code)
             entity = "Drafts"
 
         log.info("Posting to Service Layer: %s  payload=%s", entity, payload)
         return self._post(entity, payload)
+
+    def update_entity(self, table_or_entity: str, key_field: str, key_value: str,
+                      data: dict) -> dict:
+        """Correct an existing record through the Service Layer.
+
+        Master data (business partners, items) is *updated in place* - it is not
+        a document, so there is no Draft equivalent for the header fields.
+        Financial documents are never touched by this method: those go through
+        the Drafts entity so a human approves them inside B1.
+        """
+        entity = TABLE_TO_ENTITY.get(table_or_entity.upper(), table_or_entity)
+        payload = normalize_write_payload(table_or_entity, data)
+        # The key is in the URL, not the body, and must not be patched.
+        payload.pop(key_field, None)
+        if not payload:
+            return {"_noop": True, "_reason": "nothing to update"}
+        # OData string keys are escaped with doubled single quotes.
+        escaped = str(key_value).replace("'", "''")
+        return self._patch(f"{entity}('{escaped}')", payload)
+
+    # ── Draft lifecycle ─────────────────────────────────────────────────────
+    # Everything below exists so that a write never becomes a posted document
+    # without a human clicking something inside SAP Business One.
+    def get_draft(self, doc_entry: int) -> dict:
+        return self._get(f"Drafts({int(doc_entry)})")
+
+    def cancel_draft(self, doc_entry: int) -> dict:
+        """Cancel, never delete. A cancelled draft keeps its audit trail."""
+        return self._post(f"Drafts({int(doc_entry)})/Cancel", {})
+
+    def reopen_draft(self, doc_entry: int) -> dict:
+        return self._post(f"Drafts({int(doc_entry)})/Reopen", {})
+
+    def save_draft_to_document(self, doc_entry: int) -> dict:
+        """Turn an approved draft into a real B1 document.
+
+        NOTE: for a *generic* draft the Service Layer exposes this as a
+        service-level action (POST /DraftsService_SaveDraftToDocument with a
+        `Document` body), not as an instance action. PaymentDrafts and
+        StockTransferDrafts are the exceptions and do expose (id)/SaveDraftToDocument.
+        """
+        return self._post(
+            "DraftsService_SaveDraftToDocument",
+            {"Document": {"DocEntry": int(doc_entry)}},
+        )
+
+    def payment_draft_to_document(self, doc_entry: int) -> dict:
+        return self._post(f"PaymentDrafts({int(doc_entry)})/SaveDraftToDocument", {})
 
 
 def _odata_clause(field: str, op: str, value: Any) -> str:

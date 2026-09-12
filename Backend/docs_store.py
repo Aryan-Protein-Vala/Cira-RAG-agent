@@ -98,6 +98,31 @@ class DocumentStore:
         return len({c.doc for c in self._chunks})
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
+        """BM25 retrieval over the knowledge base.
+
+        IMPORTANT - what the returned numbers mean, and what they do not:
+
+        The previous version returned a key called ``similarity`` computed as
+        ``0.55 + 0.44 * (score / top_score)``. That rescales the *best* hit to
+        0.99 no matter how irrelevant it is, so a question with no real answer in
+        the corpus still came back "similarity: 0.99". That is a fabricated
+        confidence number, and it is worse than no number at all - a client will
+        quote it back at you.
+
+        We now return:
+          * ``retrieval_score``  - the raw BM25 score (only meaningful relative
+                                   to the other hits in the same query)
+          * ``top_gap``          - how far ahead the top hit is from the runner
+                                   up; ~0 means the ranking is a coin flip
+          * ``abstain``          - True when nothing in the corpus clears a
+                                   documented floor, so the caller can say
+                                   "no policy covers this" instead of quoting
+                                   the least-bad paragraph
+
+        There is deliberately NO calibrated 0-1 confidence figure: BM25 is not
+        calibrated, and inventing one is exactly the kind of fake accuracy this
+        product is not allowed to ship.
+        """
         self._load()
         terms = _tokenise(query)
         if not terms or not self._chunks:
@@ -125,16 +150,26 @@ class DocumentStore:
         best = scored[:top_k]
         if not best:
             return []
-        top_score = best[0][0] or 1.0
+
+        top_score = best[0][0]
+        runner_up = best[1][0] if len(best) > 1 else 0.0
+        # Floor below which we tell the user "nothing in the knowledge base
+        # answers this" rather than quoting the closest paragraph. 1.5 is the
+        # score of roughly a single, low-IDF term match; tune per corpus and
+        # re-measure with tests/accuracy, do not guess.
+        ABSTAIN_FLOOR = 1.5
+
         return [
             {
                 "document": c.doc,
                 "title": c.title,
                 "section": c.section,
-                "similarity": round(min(0.99, 0.55 + 0.44 * (s / top_score)), 2),
+                "retrieval_score": round(score, 3),
+                "top_gap": round(score - runner_up, 3) if score == top_score else None,
+                "abstain": score < ABSTAIN_FLOOR,
                 "content": c.text[:1800],
             }
-            for s, c in best
+            for score, c in best
         ]
 
 

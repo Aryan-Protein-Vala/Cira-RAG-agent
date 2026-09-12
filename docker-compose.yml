@@ -1,22 +1,11 @@
-version: '3.8'
-
+# One compose file. Two containers. Nothing else to run.
+#
+# This used to start a postgres service that the application never connected to:
+# Backend/database.py builds its engine from config.DATABASE_PATH (SQLite), so
+# the DATABASE_URL below was ignored, the pgdata volume was written to but never
+# read, and asyncpg was not even installed. For a deployment that is meant to be
+# one command on a customer's own server, a second database server is pure risk.
 services:
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: cira
-      POSTGRES_PASSWORD: cira_password
-      POSTGRES_DB: cira_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cira -d cira_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./Backend
@@ -24,14 +13,18 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://cira:cira_password@postgres:5432/cira_db
-      - LLM_TEMPERATURE=0.0
+      # Pick the data source explicitly. "simulator" gives a fully offline demo
+      # with no customer credentials in the container at all.
+      - CIRA_DATA_SOURCE=${CIRA_DATA_SOURCE:-simulator}
+      # Writes stay off until a human turns them on for one tenant.
+      - CIRA_ALLOW_WRITES=${CIRA_ALLOW_WRITES:-false}
+      - CIRA_SECRET_KEY=${CIRA_SECRET_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - CIRA_DB_PATH=/app/db/cira.db
+      - CIRA_DATA_DIR=/app/db
     volumes:
-      - cira_db_storage:/app/db
+      # Chat history, audit log and the offline sandbox live here.
+      - cira_data:/app/db
 
   frontend:
     build:
@@ -45,5 +38,4 @@ services:
       - backend
 
 volumes:
-  pgdata:
-  cira_db_storage:
+  cira_data:

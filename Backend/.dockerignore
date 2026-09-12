@@ -1,0 +1,51 @@
+# Build context exclusions.
+#
+# Neither Backend/ nor Frontend/ had a .dockerignore, while both Dockerfiles end
+# with `COPY . .`. That meant a local `docker build` copied .env (SAP passwords,
+# LLM keys, the admin password), the SQLite database with every tenant's
+# encrypted credentials, the auto-generated Fernet key, the SSH-tunnel helper and
+# the whole test folder into the image layer - and image layers are readable by
+# anyone who can pull the image.
+
+# Secrets / credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.fernet_key
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+htmlcov/
+.coverage
+
+# Local tooling / notes
+*.log
+*.bak
+*.zip
+*.rar
+start_ssh_tunnel.bat
+doctor.py
+
+# Tests are not needed in the runtime image (they need no ERP but they do
+# double the image and ship fixtures).
+tests/
+
+# VCS
+.git/
+.gitignore

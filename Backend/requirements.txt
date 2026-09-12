@@ -23,11 +23,17 @@ pymssql>=2.2.0                   # Microsoft SQL Server client (port 1433)
 python-dotenv>=1.0
 greenlet>=3.0.0                  # required by SQLAlchemy async on some python versions
 
+# ── Security ─────────────────────────────────────────────────────────────────
+# passlib was removed: passlib 1.7.4 (2020, last release) cannot detect bcrypt
+# >= 4.1 and its internal self-test raises ValueError on any hash() call, so
+# password hashing silently broke on a clean install. We call bcrypt directly
+# (Backend/passwords.py). Do not re-add passlib.
+bcrypt>=4.1,<6
+cryptography>=42
+
+# ── Data import / export ─────────────────────────────────────────────────────
+openpyxl>=3.1                  # .xlsx parsing for the migration tool
+
 # ── Tests (optional: pip install -r requirements.txt then run pytest) ────────
 pytest>=8.0
 pytest-asyncio>=0.23
-passlib
-bcrypt
-cryptography==50.0.1
-openpyxl
-python-multipart

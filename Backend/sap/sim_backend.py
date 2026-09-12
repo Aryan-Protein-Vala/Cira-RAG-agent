@@ -26,9 +26,14 @@ from typing import Any
 import config
 from .base import DataBackend
 from .sql_guard import translate_for_sqlite
-from .types_ import ColumnInfo, TableInfo
+from .types_ import ColumnInfo, SapDataError, TableInfo
 
 log = logging.getLogger("cira.sim")
+
+# Bump this whenever SCHEMA, the anchors or the generator change. An existing
+# sandbox file with an older marker is rebuilt automatically, instead of
+# silently serving stale data that does not match the accuracy suite.
+SANDBOX_SCHEMA_VERSION = 2
 
 # name, sqlite type, HANA-ish type shown in the catalog, description
 Col = tuple[str, str, str, str]
@@ -173,8 +178,10 @@ SCHEMA["OINV"] = list(_DOC_HEADER) + [
 SCHEMA["OPCH"] = list(_DOC_HEADER) + [
     ("PaidToDate", "REAL", "DECIMAL(19,6)", "Amount already paid"),
 ]
-for _t in ("RDR1", "INV1", "POR1", "PCH1", "DLN1", "QUT1"):
+for _t in ("RDR1", "INV1", "POR1", "PCH1", "DLN1", "QUT1", "PDN1"):
     SCHEMA[_t] = list(_DOC_LINE)
+# Goods Receipt PO (OPDN/PDN1) - same shape as the other documents.
+SCHEMA["OPDN"] = list(_DOC_HEADER)
 
 SCHEMA.update(
     {
@@ -256,6 +263,47 @@ SCHEMA.update(
             ("closeDate", "TEXT", "DATE", "Closing date"),
             ("status", "INTEGER", "INTEGER", "Status code"),
             ("priority", "TEXT", "NVARCHAR(1)", "L/M/H priority"),
+            ("technician", "TEXT", "NVARCHAR(10)", "Assigned technician code"),
+        ],
+        # ── master data the accuracy suite asks for ─────────────────────────
+        # These were referenced by suite_sandbox.jsonl but did not exist in the
+        # sandbox, so those questions could not be measured at all.
+        "OVTG": [
+            ("Code", "TEXT", "NVARCHAR(8)", "Tax code"),
+            ("Name", "TEXT", "NVARCHAR(50)", "Tax code description"),
+            ("Rate", "REAL", "DECIMAL(19,6)", "Effective rate %"),
+            ("ValidFor", "TEXT", "NVARCHAR(1)", "Y=Active"),
+        ],
+        "OCTG": [
+            ("GroupNum", "INTEGER", "INTEGER", "Payment terms key"),
+            ("PymntGroup", "TEXT", "NVARCHAR(50)", "Payment terms name"),
+            ("ExtraDays", "INTEGER", "INTEGER", "Extra days"),
+            ("ExtraMonth", "INTEGER", "INTEGER", "Extra months"),
+        ],
+        "OCRN": [
+            ("CurrCode", "TEXT", "NVARCHAR(3)", "Currency code"),
+            ("CurrName", "TEXT", "NVARCHAR(50)", "Currency name"),
+            ("DocRate", "REAL", "DECIMAL(19,6)", "Exchange rate"),
+            ("Locked", "TEXT", "NVARCHAR(1)", "Y=Locked"),
+        ],
+        "OINS": [
+            ("insID", "INTEGER", "INTEGER", "Customer equipment card number"),
+            ("itemCode", "TEXT", "NVARCHAR(50)", "Item code"),
+            ("customer", "TEXT", "NVARCHAR(15)", "Customer code"),
+            ("serialNum", "TEXT", "NVARCHAR(50)", "Serial number"),
+            ("startDate", "TEXT", "DATE", "Warranty start"),
+            ("endDate", "TEXT", "DATE", "Warranty end"),
+        ],
+        # CRD1 (BP addresses) was missing, so "business partners in <state>"
+        # could never be answered from this sandbox.
+        "CRD1": [
+            ("CardCode", "TEXT", "NVARCHAR(15)", "Business partner code"),
+            ("Address", "TEXT", "NVARCHAR(200)", "Street address"),
+            ("City", "TEXT", "NVARCHAR(100)", "City"),
+            ("State", "TEXT", "NVARCHAR(3)", "State / province code"),
+            ("ZipCode", "TEXT", "NVARCHAR(20)", "Postcode"),
+            ("Country", "TEXT", "NVARCHAR(3)", "Country code"),
+            ("AdresType", "TEXT", "NVARCHAR(1)", "B=Billing, S=Shipping"),
         ],
         "OWOR": [
             ("DocEntry", "INTEGER", "INTEGER", "Internal key"),
@@ -349,6 +397,20 @@ class SimulatorBackend(DataBackend):
                 if seeded:
                     cur.execute("SELECT COUNT(*) FROM ORDR")
                     seeded = (cur.fetchone() or [0])[0] > 0
+                if seeded:
+                    # A file built by an older version of this module is missing
+                    # tables or anchors the current suite expects - rebuild it.
+                    try:
+                        cur.execute("SELECT version FROM _SANDBOX_META")
+                        current = (cur.fetchone() or [0])[0]
+                    except sqlite3.Error:
+                        current = 0
+                    if current != SANDBOX_SCHEMA_VERSION:
+                        log.info(
+                            "Sandbox at %s is schema v%s but v%s is required - rebuilding.",
+                            self.path, current, SANDBOX_SCHEMA_VERSION,
+                        )
+                        seeded = False
                 if not seeded:
                     log.info("Seeding offline SAP B1 sandbox at %s ...", self.path)
                     started = time.time()
@@ -436,20 +498,111 @@ class SimulatorBackend(DataBackend):
         return columns, rows
 
     def create_entity(self, table_or_entity: str, data: dict) -> dict:
-        """Mock create_entity for the offline sandbox."""
-        # For a sandbox, we just pretend it succeeded and assign a random ID.
+        """Persist a write into the offline sandbox for real.
+
+        This used to return a random DocEntry and write nothing, which meant the
+        write path - and therefore the whole migration wedge - could not be
+        exercised or regression-tested without a live B1 box. We now INSERT into
+        the matching sandbox table (same names and columns as B1) so the
+        draft/idempotency/re-diff flows are testable offline. Every response is
+        still flagged simulated, and the table is the sandbox copy, never HANA.
+        """
+        from .service_layer import ENTITY_TO_TABLE, TABLE_TO_ENTITY
+
+        raw = (table_or_entity or "").strip()
+        table = ENTITY_TO_TABLE.get(raw, ENTITY_TO_TABLE.get(raw.upper(), raw)).upper()
+        if table not in SCHEMA:
+            table = TABLE_TO_ENTITY.get(raw.upper(), raw).upper()
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        if cur.fetchone() is None:
+            raise SapDataError(
+                f"The offline sandbox has no table '{table}', so it cannot store this write. "
+                f"Available: {', '.join(sorted(SCHEMA))}."
+            )
+
+        cur.execute(f'PRAGMA table_info("{table}")')
+        known = {row[1] for row in cur.fetchall()}
+        payload = {k: v for k, v in (data or {}).items()
+                   if k in known and not str(k).startswith("_") and v not in ("", None)}
+        if not payload:
+            raise SapDataError(
+                f"None of the supplied fields exist on sandbox table '{table}'."
+            )
+
         import random
-        # Optional: we could actually try to INSERT INTO the sqlite table if we want,
-        # but a mock response is usually enough for UI testing.
-        new_id = random.randint(300000, 999999)
+        next_entry = random.randint(300000, 999999)
+        for key in ("DocEntry", "TransId", "AbsEntry", "LogInstanc"):
+            if key in known and key not in payload:
+                payload[key] = next_entry
+        if "DocNum" in known and "DocNum" not in payload:
+            payload["DocNum"] = next_entry
+
+        cols = ", ".join(f'"{c}"' for c in payload)
+        marks = ", ".join("?" for _ in payload)
+        try:
+            cur.execute(f'INSERT INTO "{table}" ({cols}) VALUES ({marks})', list(payload.values()))
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            raise SapDataError(f"The sandbox rejected the write to {table}: {exc}") from exc
+
         return {
-            **data,
-            "DocEntry": new_id,
-            "DocNum": new_id,
-            "CardCode": data.get("CardCode", f"C{new_id}"),
+            **payload,
             "_simulated": True,
-            "_note": "This is a mock response from the offline sandbox.",
+            "_table": table,
+            "_note": "Written to the OFFLINE SANDBOX, not to a live SAP Business One company.",
         }
+
+    def update_entity(self, table_or_entity: str, key_field: str, key_value: str,
+                      data: dict) -> dict:
+        """Mirror of ServiceLayerBackend.update_entity for the offline sandbox."""
+        from .service_layer import ENTITY_TO_TABLE
+
+        raw = (table_or_entity or "").strip()
+        table = ENTITY_TO_TABLE.get(raw, ENTITY_TO_TABLE.get(raw.upper(), raw)).upper()
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute(f'PRAGMA table_info("{table}")')
+        known = {row[1] for row in cur.fetchall()}
+        if not known or key_field not in known:
+            raise SapDataError(f"Cannot update {table}: unknown table or key '{key_field}'.")
+
+        payload = {k: v for k, v in (data or {}).items()
+                   if k in known and not str(k).startswith("_") and v not in ("", None)}
+        payload.pop(key_field, None)
+        if not payload:
+            return {"_noop": True, "_reason": "nothing to update", "_simulated": True}
+        sets = ", ".join(f'"{c}" = ?' for c in payload)
+        cur.execute(f'UPDATE "{table}" SET {sets} WHERE "{key_field}" = ?',
+                    [*payload.values(), key_value])
+        conn.commit()
+        return {key_field: key_value, **payload, "_updated": cur.rowcount,
+                "_simulated": True}
+
+    # ── draft lifecycle (offline mirror of the Service Layer's Drafts entity) ──
+    def get_draft(self, doc_entry: int) -> dict:
+        cur = self._conn().cursor()
+        cur.execute('SELECT DocEntry, DocNum, DocObjectCode, CardCode FROM "ODRF" WHERE DocEntry = ?',
+                    (int(doc_entry),))
+        row = cur.fetchone()
+        if not row:
+            raise SapDataError(f"No sandbox draft with DocEntry {doc_entry}.")
+        return {"DocEntry": row[0], "DocNum": row[1], "DocObjectCode": row[2],
+                "CardCode": row[3], "_simulated": True}
+
+    def cancel_draft(self, doc_entry: int) -> dict:
+        cur = self._conn().cursor()
+        cur.execute('UPDATE "ODRF" SET "CANCELED" = ? WHERE "DocEntry" = ?', ("Y", int(doc_entry)))
+        self._conn().commit()
+        return {"DocEntry": int(doc_entry), "CANCELED": "Y", "_simulated": True,
+                "_note": "Drafts are cancelled, never deleted."}
+
+    def save_draft_to_document(self, doc_entry: int) -> dict:
+        return {"DocEntry": int(doc_entry), "_simulated": True,
+                "_note": "A real deployment would POST DraftsService_SaveDraftToDocument; "
+                         "the sandbox does not post documents."}
+
 
 
 def _length_of(hana_type: str) -> int | None:
@@ -545,6 +698,12 @@ def _build_dataset(conn: sqlite3.Connection) -> None:
             "SlpCode": rnd.choice(slp_codes),
         }
         (customers if is_customer else vendors).append(row)
+    # Reserve the codes used by the named anchor records below. Without this the
+    # random generator also produced a "C20000" with a different name, so
+    # "customer C20000" had two answers.
+    RESERVED_BP_CODES = {"C20000", "C20001"}
+    customers = [c for c in customers if c["CardCode"] not in RESERVED_BP_CODES]
+    vendors = [v for v in vendors if v["CardCode"] not in RESERVED_BP_CODES]
     insert("OCRD", customers + vendors)
 
     # Contacts
@@ -585,6 +744,8 @@ def _build_dataset(conn: sqlite3.Connection) -> None:
             "SalUnitMsr": rnd.choice(["Pcs", "Units", "Kg", "Box", "Set"]),
             "CreateDate": rand_date(today - dt.timedelta(days=1500), today).isoformat(),
         })
+    # A00001..A00003 are the named anchors added below.
+    items = [i for i in items if i["ItemCode"] not in {"A00001", "A00002", "A00003"}]
     insert("OITM", items)
 
     # Warehouses + per-warehouse stock
@@ -832,6 +993,7 @@ def _build_dataset(conn: sqlite3.Connection) -> None:
             "closeDate": (created + dt.timedelta(days=rnd.randint(1, 40))).isoformat(),
             "status": rnd.choice([-3, -2, -1, 1]),
             "priority": rnd.choice(["L", "M", "H"]),
+            "technician": f"T{rnd.randint(1, 5):02d}",
         })
     insert("OSCL", calls)
 
@@ -852,12 +1014,202 @@ def _build_dataset(conn: sqlite3.Connection) -> None:
         })
     insert("OWOR", prod)
 
+    # ── seed the tables added above ────────────────────────────────────────
+    insert("OVTG", [
+        {"Code": c, "Name": n, "Rate": r, "ValidFor": "Y"}
+        for c, n, r in [
+            ("GST5", "GST 5%", 5.0), ("GST12", "GST 12%", 12.0),
+            ("GST18", "GST 18%", 18.0), ("GST28", "GST 28%", 28.0),
+            ("VAT5", "VAT 5%", 5.0), ("EX0", "Exempt 0%", 0.0),
+        ]
+    ])
+    insert("OCTG", [
+        {"GroupNum": 1 + i, "PymntGroup": name, "ExtraDays": days, "ExtraMonth": months}
+        for i, (name, days, months) in enumerate([
+            ("Cash", 0, 0), ("Net 15", 15, 0), ("Net 30", 30, 0),
+            ("Net 45", 45, 0), ("Net 60", 60, 0), ("Advance 50%", 0, 0),
+            ("Net 30 EOM", 30, 1), ("Letter of Credit", 90, 0),
+        ])
+    ])
+    insert("OCRN", [
+        {"CurrCode": c, "CurrName": n, "DocRate": r, "Locked": "N"}
+        for c, n, r in [
+            ("INR", "Indian Rupee", 1.0), ("USD", "US Dollar", 83.2),
+            ("EUR", "Euro", 90.1), ("AED", "UAE Dirham", 22.65),
+            ("GBP", "Pound Sterling", 105.4), ("SGD", "Singapore Dollar", 61.8),
+        ]
+    ])
+    insert("OINS", [
+        {
+            "insID": 1 + i,
+            "itemCode": rnd.choice(items)["ItemCode"],
+            "customer": rnd.choice(customers)["CardCode"],
+            "serialNum": f"SN{100000 + i}",
+            "startDate": (d := rand_date()).isoformat(),
+            "endDate": (d + dt.timedelta(days=365)).isoformat(),
+        }
+        for i in range(140)
+    ])
+    addresses = []
+    for i, c in enumerate(customers):
+        addresses.append({
+            "CardCode": c["CardCode"],
+            "Address": f"{rnd.randint(1, 300)} {rnd.choice(['MG Road', 'Industrial Estate', 'Ring Road', 'Sector 5'])}",
+            "City": c["City"],
+            "State": rnd.choice(["CA", "NY", "TX", "MH", "KA", "DL"]),
+            "ZipCode": f"{rnd.randint(100000, 999999)}",
+            "Country": c["Country"],
+            "AdresType": "B",
+        })
+    insert("CRD1", addresses)
+    grpo = make_docs("OPDN", "PDN1", 420, vendors, 30001)
+    _ = grpo
+
+    # ── named anchor records ───────────────────────────────────────────────
+    # The accuracy suite asks about specific, human-readable entities
+    # ("Earthshaker Corporation", item "A00001", the "Printers" group). Without
+    # these anchors those questions had no correct answer in the sandbox, so
+    # they could only be graded structurally - which is not evidence of
+    # accuracy. All values here are fixed, so expected results are stable.
+    insert("OCRD", [
+        {"CardCode": "C20000", "CardName": "Earthshaker Corporation", "CardType": "C",
+         "GroupCode": bp_groups[0]["GroupCode"], "Balance": 412350.75,
+         "Phone1": "+91-9820011223", "E_Mail": "ap@earthshaker.example.com",
+         "City": "Mumbai", "Country": "IN", "Currency": "INR",
+         "CreditLine": 2500000.0, "validFor": "Y", "CreateDate": (today - dt.timedelta(days=900)).isoformat(),
+         "SlpCode": 1},
+        {"CardCode": "C20001", "CardName": "Maxi-Teq", "CardType": "C",
+         "GroupCode": bp_groups[0]["GroupCode"], "Balance": 158900.40,
+         "Phone1": "+91-9820044556", "E_Mail": "purchase@maxi-teq.example.com",
+         "City": "Pune", "Country": "IN", "Currency": "INR",
+         "CreditLine": 1000000.0, "validFor": "Y", "CreateDate": (today - dt.timedelta(days=700)).isoformat(),
+         "SlpCode": 2},
+    ])
+    insert("OCPR", [
+        {"CntctCode": 9001, "CardCode": "C20001", "Name": "Rohit Deshmukh",
+         "Position": "Purchase Manager", "Tel1": "+91-9820044557",
+         "E_MailL": "rohit.deshmukh@maxi-teq.example.com"},
+        {"CntctCode": 9002, "CardCode": "C20000", "Name": "Anita Rao",
+         "Position": "Accounts Payable", "Tel1": "+91-9820011224",
+         "E_MailL": "anita.rao@earthshaker.example.com"},
+    ])
+    insert("OITB", [
+        {"ItmsGrpCod": 200, "ItmsGrpNam": "Printers"},
+        {"ItmsGrpCod": 201, "ItmsGrpNam": "Servers"},
+    ])
+    insert("OITM", [
+        {"ItemCode": "A00001", "ItemName": "LaserJet Printer XL", "ItemType": "I",
+         "ItmsGrpCod": 200, "OnHand": 240.0, "IsCommited": 35.0, "OnOrder": 0.0,
+         "AvgPrice": 18500.0, "LastPurPrc": 17800.0, "InvntItem": "Y", "validFor": "Y",
+         "SalUnitMsr": "Pcs", "CreateDate": (today - dt.timedelta(days=800)).isoformat()},
+        {"ItemCode": "A00002", "ItemName": "Rack Server 2U", "ItemType": "I",
+         "ItmsGrpCod": 201, "OnHand": 62.0, "IsCommited": 10.0, "OnOrder": 25.0,
+         "AvgPrice": 142000.0, "LastPurPrc": 139500.0, "InvntItem": "Y", "validFor": "Y",
+         "SalUnitMsr": "Pcs", "CreateDate": (today - dt.timedelta(days=600)).isoformat()},
+        {"ItemCode": "A00003", "ItemName": "Thermal Printer Compact", "ItemType": "I",
+         "ItmsGrpCod": 200, "OnHand": 0.0, "IsCommited": 0.0, "OnOrder": 40.0,
+         "AvgPrice": 7200.0, "LastPurPrc": 7100.0, "InvntItem": "Y", "validFor": "Y",
+         "SalUnitMsr": "Pcs", "CreateDate": (today - dt.timedelta(days=400)).isoformat()},
+    ])
+    insert("OITW", [
+        {"ItemCode": "A00001", "WhsCode": "WH01", "OnHand": 140.0, "IsCommited": 20.0,
+         "OnOrder": 0.0, "AvgPrice": 18500.0, "MinStock": 50.0},
+        {"ItemCode": "A00001", "WhsCode": "WH02", "OnHand": 100.0, "IsCommited": 15.0,
+         "OnOrder": 0.0, "AvgPrice": 18500.0, "MinStock": 40.0},
+        {"ItemCode": "A00002", "WhsCode": "WH01", "OnHand": 62.0, "IsCommited": 10.0,
+         "OnOrder": 25.0, "AvgPrice": 142000.0, "MinStock": 20.0},
+        {"ItemCode": "A00003", "WhsCode": "WH01", "OnHand": 0.0, "IsCommited": 0.0,
+         "OnOrder": 40.0, "AvgPrice": 7200.0, "MinStock": 10.0},
+    ])
+    insert("OACT", [
+        {"AcctCode": "111000", "AcctName": "Cash in Bank", "CurrTotal": 3271450.88,
+         "ActType": "A", "Postable": "Y", "Levels": 3},
+    ])
+    insert("OINS", [
+        {"insID": 9001 + i, "itemCode": "A00001", "customer": "C20000",
+         "serialNum": f"LJXL-{1000 + i}", "startDate": (today - dt.timedelta(days=300)).isoformat(),
+         "endDate": (today + dt.timedelta(days=65)).isoformat()}
+        for i in range(2)
+    ])
+    insert("OSCL", [
+        {"callID": 9001, "customer": "C20000", "subject": "Printer jams on duplex",
+         "createDate": (today - dt.timedelta(days=6)).isoformat(),
+         "closeDate": (today - dt.timedelta(days=3)).isoformat(),
+         "status": -3, "priority": "H", "technician": "T01"},
+        {"callID": 9002, "customer": "C20001", "subject": "Server fan noise",
+         "createDate": (today - dt.timedelta(days=2)).isoformat(),
+         "closeDate": (today - dt.timedelta(days=1)).isoformat(),
+         "status": -2, "priority": "M", "technician": "T01"},
+    ])
+    insert("OINV", [
+        {"DocEntry": 90001, "DocNum": 90001, "DocDate": (today - dt.timedelta(days=45)).isoformat(),
+         "CardCode": "C20000", "CardName": "Earthshaker Corporation", "DocTotal": 486250.0,
+         "DocCur": "INR", "DocStatus": "O", "CANCELED": "N", "SlpCode": 1,
+         "Comments": "Q1 printer rollout", "PaidToDate": 0.0},
+        {"DocEntry": 90002, "DocNum": 90002, "DocDate": (today - dt.timedelta(days=20)).isoformat(),
+         "CardCode": "C20000", "CardName": "Earthshaker Corporation", "DocTotal": 132900.0,
+         "DocCur": "INR", "DocStatus": "O", "CANCELED": "N", "SlpCode": 1,
+         "Comments": "Consumables", "PaidToDate": 0.0},
+        {"DocEntry": 90003, "DocNum": 90003, "DocDate": (today - dt.timedelta(days=10)).isoformat(),
+         "CardCode": "C20001", "CardName": "Maxi-Teq", "DocTotal": 74500.0,
+         "DocCur": "INR", "DocStatus": "O", "CANCELED": "N", "SlpCode": 2,
+         "Comments": "Thermal printers", "PaidToDate": 0.0},
+    ])
+    insert("INV1", [
+        {"DocEntry": 90001, "LineNum": 0, "ItemCode": "A00001", "Dscription": "LaserJet Printer XL",
+         "Quantity": 24.0, "Price": 18500.0, "LineTotal": 444000.0, "WhsCode": "WH01",
+         "ShipDate": (today - dt.timedelta(days=45)).isoformat()},
+        {"DocEntry": 90001, "LineNum": 1, "ItemCode": "A00002", "Dscription": "Rack Server 2U",
+         "Quantity": 0.2979, "Price": 142000.0, "LineTotal": 42300.0, "WhsCode": "WH01",
+         "ShipDate": (today - dt.timedelta(days=45)).isoformat()},
+        {"DocEntry": 90002, "LineNum": 0, "ItemCode": "A00001", "Dscription": "LaserJet Printer XL",
+         "Quantity": 7.0, "Price": 18985.71, "LineTotal": 132900.0, "WhsCode": "WH02",
+         "ShipDate": (today - dt.timedelta(days=20)).isoformat()},
+        {"DocEntry": 90003, "LineNum": 0, "ItemCode": "A00003", "Dscription": "Thermal Printer Compact",
+         "Quantity": 10.0, "Price": 7450.0, "LineTotal": 74500.0, "WhsCode": "WH01",
+         "ShipDate": (today - dt.timedelta(days=10)).isoformat()},
+    ])
+    insert("ORDR", [
+        {"DocEntry": 90011, "DocNum": 90011, "DocDate": (today - dt.timedelta(days=12)).isoformat(),
+         "CardCode": "C20000", "CardName": "Earthshaker Corporation", "DocTotal": 3700000.0,
+         "DocCur": "INR", "DocStatus": "O", "CANCELED": "N", "SlpCode": 1,
+         "Comments": "Annual printer contract"},
+        {"DocEntry": 90012, "DocNum": 90012, "DocDate": (today - dt.timedelta(days=4)).isoformat(),
+         "CardCode": "C20001", "CardName": "Maxi-Teq", "DocTotal": 1420000.0,
+         "DocCur": "INR", "DocStatus": "O", "CANCELED": "N", "SlpCode": 2,
+         "Comments": "Server refresh"},
+    ])
+    insert("RDR1", [
+        {"DocEntry": 90011, "LineNum": 0, "ItemCode": "A00001", "Dscription": "LaserJet Printer XL",
+         "Quantity": 200.0, "Price": 18500.0, "LineTotal": 3700000.0, "WhsCode": "WH01",
+         "ShipDate": (today + dt.timedelta(days=18)).isoformat()},
+        {"DocEntry": 90012, "LineNum": 0, "ItemCode": "A00002", "Dscription": "Rack Server 2U",
+         "Quantity": 10.0, "Price": 142000.0, "LineTotal": 1420000.0, "WhsCode": "WH01",
+         "ShipDate": (today + dt.timedelta(days=25)).isoformat()},
+    ])
+    insert("OPDN", [
+        {"DocEntry": 90021, "DocNum": 90021, "DocDate": (today - dt.timedelta(days=70)).isoformat(),
+         "CardCode": vendors[0]["CardCode"], "CardName": vendors[0]["CardName"],
+         "DocTotal": 2130000.0, "DocCur": "INR", "DocStatus": "C", "CANCELED": "N",
+         "SlpCode": 1, "Comments": "Server hardware intake"},
+    ])
+    insert("PDN1", [
+        {"DocEntry": 90021, "LineNum": 0, "ItemCode": "A00002", "Dscription": "Rack Server 2U",
+         "Quantity": 15.0, "Price": 142000.0, "LineTotal": 2130000.0, "WhsCode": "WH01",
+         "ShipDate": (today - dt.timedelta(days=70)).isoformat()},
+    ])
+
     # Helpful indexes
     for table, column in [("ORDR", "CardCode"), ("OINV", "CardCode"), ("OINV", "DocDate"),
                           ("ORDR", "DocDate"), ("RDR1", "DocEntry"), ("INV1", "DocEntry"),
                           ("OPOR", "CardCode"), ("OITW", "ItemCode"), ("JDT1", "TransId"),
-                          ("OINM", "ItemCode")]:
+                          ("OINM", "ItemCode"), ("OVTG", "Code"), ("OCTG", "GroupNum"),
+                          ("OCRN", "CurrCode"), ("OINS", "itemCode"), ("CRD1", "CardCode"),
+                          ("OPDN", "DocEntry"), ("PDN1", "DocEntry")]:
         cur.execute(f'CREATE INDEX IF NOT EXISTS "ix_{table}_{column}" ON "{table}" ("{column}")')
 
+    cur.execute('DROP TABLE IF EXISTS "_SANDBOX_META"')
+    cur.execute('CREATE TABLE "_SANDBOX_META" (version INTEGER)')
+    cur.execute('INSERT INTO "_SANDBOX_META" (version) VALUES (?)', (SANDBOX_SCHEMA_VERSION,))
     conn.commit()
     _ = orders, purchase_orders  # keep references for readability

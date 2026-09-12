@@ -1,0 +1,33 @@
+# Build context exclusions for the frontend image.
+#
+# Frontend/Dockerfile does `COPY . .` and there was no .dockerignore, so a local
+# build baked .env.local (API keys, backend origin), node_modules from the host
+# and every local artefact into the image.
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output (rebuilt inside the image)
+node_modules
+.next
+out
+dist
+build
+coverage
+
+# Local tooling
+*.log
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# VCS
+.git/
+.gitignore
+
+# Editor/OS noise
+.DS_Store
+.idea/
+.vscode/

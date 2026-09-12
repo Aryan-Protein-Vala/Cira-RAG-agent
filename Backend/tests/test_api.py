@@ -1,6 +1,7 @@
 """API-level tests: auth hardening, ownership checks and SSE streaming."""
 
 import json
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +16,10 @@ def client():
         yield c
 
 
-def _login(client, employee="admin", password="asdfghjkl;"):
+_TEST_ADMIN_PASSWORD = os.environ.get("CIRA_ADMIN_PASSWORD", "test-only-admin-password")
+
+
+def _login(client, employee="admin", password=_TEST_ADMIN_PASSWORD):
     res = client.post("/auth/login", json={"employee_id": employee, "password": password})
     assert res.status_code == 200, res.text
     return res.json()["token"]

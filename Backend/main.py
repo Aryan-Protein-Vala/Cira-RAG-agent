@@ -33,6 +33,7 @@ from database import (
 )
 from sap import router as sap
 from admin_routes import router as admin_router
+from migration_routes import router as migration_router
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL, logging.INFO),
@@ -249,6 +250,9 @@ async def set_tenant_context(credentials: HTTPAuthorizationCredentials = Depends
     return ctx
 
 app.include_router(admin_router)
+# The Excel-to-B1 migration wedge. Previous builds defined these routes but
+# never mounted them, so /admin/migration/* returned 404 in every deployment.
+app.include_router(migration_router)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Health & diagnostics

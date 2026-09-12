@@ -1,41 +1,16 @@
+"""Create a superadmin and a partner admin for local testing.
+
+Superseded by seed_admins.py, which takes the same values from the environment.
+This wrapper stays because some setup notes call it by name. Credentials are
+NEVER hard-coded: run it with the variables below set.
+
+    CIRA_SUPERADMIN_EMAIL / CIRA_SUPERADMIN_PASSWORD
+    CIRA_PARTNER_EMAIL     / CIRA_PARTNER_PASSWORD
+"""
+
 import asyncio
-import uuid
-from passlib.context import CryptContext
-from database import AsyncSessionLocal, SuperAdmin, Partner, init_db
-from sqlalchemy import select
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-async def main():
-    await init_db()
-    async with AsyncSessionLocal() as session:
-        # Create SuperAdmin
-        admin_email = "aryansharma24112003@gmail.com"
-        result = await session.execute(select(SuperAdmin).where(SuperAdmin.email == admin_email))
-        if not result.scalars().first():
-            admin = SuperAdmin(
-                id=str(uuid.uuid4()),
-                email=admin_email,
-                password_hash=pwd_context.hash("aryan")
-            )
-            session.add(admin)
-            print(f"Created SuperAdmin: {admin_email}")
-
-        # Create Partner Admin
-        partner_email = "partner@cira.app"
-        result = await session.execute(select(Partner).where(Partner.email == partner_email))
-        if not result.scalars().first():
-            partner = Partner(
-                id=str(uuid.uuid4()),
-                name="Mock Partner",
-                email=partner_email,
-                password_hash=pwd_context.hash("partner123"),
-                slug="mockpartner"
-            )
-            session.add(partner)
-            print(f"Created Partner: {partner_email} (password: partner123)")
-            
-        await session.commit()
+from seed_admins import seed
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(seed())
