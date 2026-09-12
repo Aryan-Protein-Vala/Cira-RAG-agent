@@ -180,7 +180,7 @@ function LoginScreen({ onLogin, brandName, logoUrl }: { onLogin: (user: any, tok
             <input
               value={companyDb}
               onChange={(e) => setCompanyDb(e.target.value)}
-              placeholder="e.g. CINNTRA_DEMO_NEW"
+              placeholder="e.g. B1_COPILOT_LIVE"
               className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             />
           </div>
@@ -236,15 +236,15 @@ function Robot() {
     
     const thoughts = [
       "Need a hand? I can help you explore your SAP data.",
-      "I was built by Cinntra to make your life easier!",
+      "I was built by B1 Copilot to make your life easier!",
       "Analyzing ERP tables... just kidding, taking a break!",
       "Did you know I can query your SAP HANA database in real-time?",
       "Let's find those open invoices!",
-      "B1 IQ at your service. Powered by Cinntra.",
+      "B1 Copilot at your service.",
       "Just crunching some numbers. Need anything?",
       "Who knew SAP data could look this good?",
       "Ask me anything about your inventory or general ledger.",
-      "Cinntra engineers gave me a glowing antenna for a reason!",
+      "B1 Copilot engineers gave me a glowing antenna for a reason!",
       "I dream of perfectly normalized database tables.",
       "Got any complex queries? I love a good challenge.",
       "Checking the latest purchase orders for you...",
@@ -255,7 +255,7 @@ function Robot() {
       "Hovering makes me happy. ^_^",
       "I'm keeping an eye on your stock levels.",
       "Don't worry, I won't write to your ERP. I'm read-only!",
-      "Cinntra made me smart, but you make me useful.",
+      "B1 Copilot made me smart, but you make me useful.",
       "I wonder what the top 10 customers bought this year...",
       "Need a chart? Just ask me to draw one!",
       "I never sleep, I just float here waiting for questions.",
