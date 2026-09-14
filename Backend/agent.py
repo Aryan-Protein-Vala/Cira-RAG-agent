@@ -1,4 +1,4 @@
-"""CIRA agent: natural language -> SAP Business One data -> table + chart + summary.
+"""B1 Copilot agent: natural language -> SAP Business One data -> table + chart + summary.
 
 Design notes
 ------------
@@ -56,7 +56,7 @@ def build_llm(model: str | None = None):
         streaming=True,
         default_headers={
             "HTTP-Referer": "https://cira.local",
-            "X-Title": "CIRA - Corporate Intelligence and Reporting Assistant",
+            "X-Title": "B1 Copilot - SAP Business One Assistant",
         },
     )
 
@@ -481,7 +481,7 @@ def dataset_events(dataset: Dataset, user_query: str) -> list[dict]:
     return events
 
 
-SYSTEM_PROMPT = """You are CIRA (Corporate Intelligence & Reporting Assistant), the executive \
+SYSTEM_PROMPT = """You are B1 Copilot (SAP Business One Assistant), the executive \
 analytics agent for the SAP Business One company database '{schema}' on SAP HANA. \
 You are talking to employee '{employee}'.
 
@@ -852,6 +852,10 @@ async def _deterministic_stream(query: str, bus: ResultBus, employee_id: str):
     if any(w in q for w in ("create", "add", "new", "register", "insert")) and any(
         e in q for e in ("customer", "vendor", "supplier", "partner", "lead", "item", "product", "order", "invoice", "quotation", "quote", "po")
     ) and not any(r in q for r in ("list", "show", "find", "how many", "top", "total", "revenue", "sum", "sales", "report")):
+        if not config.ALLOW_WRITES:
+            yield sse({"type": "chunk", "text": "Write operations are disabled in this tier. B1 Copilot is running in read-only analytics mode."})
+            return
+
         from sap.form_templates import get_template_for_intent
         tpl = get_template_for_intent(query)
         if tpl:
