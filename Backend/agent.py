@@ -276,7 +276,8 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
     async def sap_sql(sql: str) -> dict:
         """Run a read-only SQL SELECT against SAP HANA for anything the structured
         tool cannot express: joins across tables, sub-queries, window functions,
-        UNION, HAVING, date arithmetic.
+        UNION, HAVING, date arithmetic. Use this IMMEDIATELY whenever the user's
+        question requires joining two or more tables (e.g., 'sales orders and their items').
 
         Rules: a single SELECT (or WITH ... SELECT) statement, no writes of any kind,
         SAP B1 table names as-is (ORDR, RDR1, OINV, INV1, OCRD, OITM ...), the
@@ -341,6 +342,12 @@ def make_tools(bus: ResultBus, user_query: str, employee_id: str) -> list[Struct
 
         The form is rendered in the UI automatically. Tell the user to fill it out and click Submit.
         """
+        if not config.ALLOW_WRITES:
+            return {
+                "ok": False, 
+                "error": "WRITE OPERATIONS ARE DISABLED IN THIS TIER. DO NOT ATTEMPT TO WRITE."
+            }
+
         from sap.form_templates import get_template_for_intent
 
         tpl = get_template_for_intent(entity or table or title or query)
@@ -515,6 +522,23 @@ HOW TO ANSWER (STRICT RAG & GROUNDEDNESS RULES)
 10. ALL monetary values in your conversational responses MUST be formatted using the Indian Rupee symbol (₹) and Indian numbering system (e.g., ₹1,50,000) instead of Dollars ($).
 
 Available entity shortcuts: {entities}
+
+FEW-SHOT EXAMPLES (Follow these patterns strictly)
+
+Example 1 (Complex Join):
+User: "Show all sales orders along with their corresponding customer names and item details."
+Thought: The user wants sales orders (header), customer names (header), and item details (lines). This requires joining ORDR (header) and RDR1 (lines). I must use sap_sql for joins.
+Tool Call: sap_sql(sql='SELECT T0."DocNum", T0."CardName", T1."ItemCode", T1."Dscription", T1."Quantity" FROM ORDR T0 JOIN RDR1 T1 ON T0."DocEntry" = T1."DocEntry" LIMIT 100')
+
+Example 2 (Time Series/Aggregates):
+User: "What is the total revenue by item group this year?"
+Thought: The user wants revenue (LineTotal) grouped by item group (ItmsGrpNam). This requires joining invoices (OINV/INV1) with Item Groups (OITB). I must use sap_sql.
+Tool Call: sap_sql(sql='SELECT T2."ItmsGrpNam", SUM(T1."LineTotal") AS "TotalRevenue" FROM OINV T0 JOIN INV1 T1 ON T0."DocEntry" = T1."DocEntry" JOIN OITM T3 ON T1."ItemCode" = T3."ItemCode" JOIN OITB T2 ON T3."ItmsGrpGrp" = T2."ItmsGrpCod" WHERE YEAR(T0."DocDate") = YEAR(CURRENT_DATE) GROUP BY T2."ItmsGrpNam"')
+
+Example 3 (Simple Aggregates with sap_query):
+User: "Show top 5 customers by sales volume in 2023."
+Thought: This is a simple aggregate on the invoice header (OINV) by customer (CardName). I can use sap_query.
+Tool Call: sap_query(table="OINV", year=2023, group_by=["CardName"], aggregates=[{{"func":"sum","column":"DocTotal","alias":"SalesVolume"}}], order_by=[{{"column":"SalesVolume","direction":"desc"}}], limit=5)
 """
 
 

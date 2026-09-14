@@ -67,11 +67,11 @@ GROQ_API_KEY = _str("GROQ_API_KEY")
 DATA_SOURCE = _str("CIRA_DATA_SOURCE", "auto").lower()
 
 # ── SAP HANA (direct SQL — this is the "deep" path) ──────────────────────────
-HANA_HOST = _str("HANA_HOST", _str("SAP_B1_HOST", "20.204.5.237"))
+HANA_HOST = _str("HANA_HOST", _str("SAP_B1_HOST", ""))
 HANA_PORT = _int("HANA_PORT", 30013)
-HANA_USER = _str("HANA_USER", "SYSTEM")
+HANA_USER = _str("HANA_USER", "B1ADMIN")
 HANA_PASSWORD = _str("HANA_PASSWORD", "")
-HANA_SCHEMA = _str("HANA_SCHEMA", _str("SAP_B1_COMPANY_DB", "CIRA_DEMO_NEW"))
+HANA_SCHEMA = _str("HANA_SCHEMA", _str("SAP_B1_COMPANY_DB", ""))
 HANA_DATABASE_NAME = _str("HANA_DATABASE_NAME", "")
 HANA_ENCRYPT = _bool("HANA_ENCRYPT", True)
 HANA_VALIDATE_CERT = _bool("HANA_SSL_VALIDATE_CERT", False)
@@ -112,25 +112,24 @@ SERVICE_LAYER_BASE = _str(
 
 # ── Multi-Tenancy Context ────────────────────────────────────────────────────
 # In a real production app, this would be a Postgres DB table lookup.
-# For now, we mock multiple company tenants here.
-MOCK_TENANTS = {
-    "CIRA_DEMO_NEW": {
-        "HANA_SCHEMA": "CIRA_DEMO_NEW",
-        "SAP_B1_COMPANY_DB": "CIRA_DEMO_NEW",
+# For now, we dynamically map the primary tenant from the environment variables.
+MOCK_TENANTS = {}
+if HANA_SCHEMA:
+    MOCK_TENANTS[HANA_SCHEMA] = {
+        "HANA_SCHEMA": HANA_SCHEMA,
+        "SAP_B1_COMPANY_DB": SAP_B1_COMPANY_DB or HANA_SCHEMA,
+        "HANA_HOST": HANA_HOST,
+        "HANA_PORT": HANA_PORT,
         "HANA_USER": HANA_USER,
         "HANA_PASSWORD": HANA_PASSWORD,
         "SAP_B1_USER": SAP_B1_USER,
         "SAP_B1_PASSWORD": SAP_B1_PASSWORD,
-    },
-    "CLIENT_B_PROD": {
-        "HANA_SCHEMA": "CLIENT_B_PROD",
-        "SAP_B1_COMPANY_DB": "CLIENT_B_PROD",
-        "HANA_USER": HANA_USER, # Using same user/pass for demo
-        "HANA_PASSWORD": HANA_PASSWORD,
-        "SAP_B1_USER": SAP_B1_USER,
-        "SAP_B1_PASSWORD": SAP_B1_PASSWORD,
     }
-}
+
+# ── Write safety ────────────────────────────────────────────────────────────
+# When False, the agent is physically blocked from initiating any write requests
+# to the Service Layer. Read-only tier enforcement.
+ALLOW_WRITES = _bool("CIRA_ALLOW_WRITES", False)
 
 # The active tenant configuration for the current HTTP request / asyncio task
 CURRENT_TENANT = ContextVar("CURRENT_TENANT", default=None)
@@ -199,6 +198,9 @@ def summary() -> dict:
             "user": HANA_USER,
             "encrypt": HANA_ENCRYPT,
             "credentials_configured": bool(HANA_PASSWORD),
+        },
+        "safety": {
+            "writes_enabled": ALLOW_WRITES,
         },
         "service_layer": {
             "base_url": SERVICE_LAYER_BASE,
