@@ -1,4 +1,4 @@
-"""CIRA backend API.
+"""B1 Copilot backend API.
 
 FastAPI + SSE streaming chat over SAP Business One / HANA.
 """
@@ -45,7 +45,7 @@ log = logging.getLogger("cira")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    log.info("CIRA backend starting — data source mode: %s", config.DATA_SOURCE)
+    log.info("B1 Copilot backend starting — data source mode: %s", config.DATA_SOURCE)
     if not config.OPENROUTER_API_KEY:
         log.warning(
             "No OPENROUTER_API_KEY configured — running the deterministic planner. "
@@ -125,7 +125,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     t_res = await db.execute(select(Tenant).where(Tenant.company_db == user["company_db"]))
     tenant_row = t_res.scalars().first()
     
-    brand_name = "CIRA"
+    brand_name = "B1 Copilot"
     logo_url = ""
     
     if tenant_row:
@@ -178,17 +178,29 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/auth/me")
-async def me(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+async def me(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: AsyncSession = Depends(get_db)):
     ctx = validate_and_extract(credentials)
-    # The frontend usually hits /auth/me to restore session, so it's good to include it here but
-    # for simplicity, we rely on the login data stored in local storage for branding, or we can just 
-    # fetch the branding dynamically if needed. We'll just return what's in the token.
+    company_db = ctx.get("company_db", "")
+    brand_name = "B1 Copilot"
+    logo_url = ""
+    if company_db:
+        from database import Tenant, Partner
+        t_res = await db.execute(select(Tenant).where(Tenant.company_db == company_db))
+        tenant_row = t_res.scalars().first()
+        if tenant_row and tenant_row.partner_id:
+            p_res = await db.execute(select(Partner).where(Partner.id == tenant_row.partner_id))
+            partner_row = p_res.scalars().first()
+            if partner_row:
+                brand_name = partner_row.brand_name or partner_row.name or "B1 Copilot"
+                logo_url = partner_row.logo_url or ""
     return {
         "employee_id": ctx["employee_id"],
         "name": ctx.get("name"),
         "roles": ctx.get("roles", []),
         "expires_at": ctx.get("exp"),
-        "company_db": ctx.get("company_db", ""),
+        "company_db": company_db,
+        "brand_name": brand_name,
+        "logo_url": logo_url,
     }
 
 
@@ -346,8 +358,7 @@ async def sap_write(
 
 
 @app.get("/sap/health")
-async def sap_health(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
-    validate_and_extract(credentials)
+async def sap_health(user_context: dict = Depends(set_tenant_context)):
     return await sap.health()
 
 
