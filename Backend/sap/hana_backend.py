@@ -25,7 +25,7 @@ from .base import DataBackend
 from .serialize import to_jsonable
 from .types_ import ColumnInfo, SapUnavailableError, TableInfo
 
-log = logging.getLogger("cira.hana")
+log = logging.getLogger("copilot.hana")
 
 
 class HanaBackend(DataBackend):
@@ -72,8 +72,8 @@ class HanaBackend(DataBackend):
             "user": self.user,
             "password": self.password,
             "autocommit": True,
-            "connectTimeout": config.HANA_CONNECT_TIMEOUT_MS,
-            "communicationTimeout": config.HANA_QUERY_TIMEOUT_S * 1000,
+            "connectTimeout": 2000,
+            "communicationTimeout": 2000,
         }
         if config.HANA_ENCRYPT:
             kwargs["encrypt"] = True

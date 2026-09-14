@@ -26,7 +26,7 @@ import config
 from .base import DataBackend
 from .types_ import ColumnInfo, SapDataError, SapUnavailableError, TableInfo
 
-log = logging.getLogger("cira.servicelayer")
+log = logging.getLogger("copilot.servicelayer")
 
 # SAP B1 table -> Service Layer entity set
 TABLE_TO_ENTITY = {
