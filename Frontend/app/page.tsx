@@ -213,7 +213,7 @@ function LoginScreen({ onLogin, brandName, logoUrl }: { onLogin: (user: any, tok
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Custom Components (Robots & Avatars)                                       */
 /* ────────────────────────────────────────────────────────────────────────── */
-function Robot() {
+function Robot({ brandName = 'AI Copilot' }: { brandName?: string }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
@@ -236,26 +236,26 @@ function Robot() {
     
     const thoughts = [
       "Need a hand? I can help you explore your SAP data.",
-      "I was built by B1 Copilot to make your life easier!",
+      `I was built by ${brandName} to make your life easier!`,
       "Analyzing ERP tables... just kidding, taking a break!",
       "Did you know I can query your SAP HANA database in real-time?",
       "Let's find those open invoices!",
-      "B1 Copilot at your service.",
+      `${brandName} at your service.`,
       "Just crunching some numbers. Need anything?",
       "Who knew SAP data could look this good?",
       "Ask me anything about your inventory or general ledger.",
-      "B1 Copilot engineers gave me a glowing antenna for a reason!",
+      `${brandName} engineers gave me a glowing antenna for a reason!`,
       "I dream of perfectly normalized database tables.",
       "Got any complex queries? I love a good challenge.",
       "Checking the latest purchase orders for you...",
       "I speak fluent SQL so you don't have to.",
       "Is it time to run the end-of-month reports yet?",
-      "B1 IQ: Where enterprise data meets intelligent chat.",
+      `${brandName}: Where enterprise data meets intelligent chat.`,
       "I can scan thousands of SAP rows in milliseconds!",
       "Hovering makes me happy. ^_^",
       "I'm keeping an eye on your stock levels.",
       "Don't worry, I won't write to your ERP. I'm read-only!",
-      "B1 Copilot made me smart, but you make me useful.",
+      `${brandName} made me smart, but you make me useful.`,
       "I wonder what the top 10 customers bought this year...",
       "Need a chart? Just ask me to draw one!",
       "I never sleep, I just float here waiting for questions.",
@@ -438,8 +438,8 @@ export default function Page() {
 
     const savedToken = localStorage.getItem('cira-token')
     const savedEmpId = localStorage.getItem('cira-emp-id')
-    const savedBrandName = localStorage.getItem('cira-brand') || 'CIRA'
-    const savedLogoUrl = localStorage.getItem('cira-logo') || ''
+    const savedBrandName = localStorage.getItem('cira-brand') || 'B1 Copilot'
+    const savedLogoUrl = localStorage.getItem('cira-logo') || '/logo.jpg'
     if (savedToken && savedEmpId && savedToken !== 'demo-token') {
       setEmployeeId(savedEmpId)
       setSessionToken(savedToken)
@@ -453,6 +453,12 @@ export default function Page() {
     setProfileName(localStorage.getItem('cira-profile-name') || 'User')
     setIsAuthLoaded(true)
   }, [])
+
+  useEffect(() => {
+    if (brandName) {
+      document.title = `${brandName} — Enterprise Intelligence Control Center`
+    }
+  }, [brandName])
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark'
@@ -905,14 +911,14 @@ export default function Page() {
           setEmployeeId(user.employee_id)
           setProfileName(user.name)
           setSessionToken(token)
-          setBrandName(user.brand_name || 'CIRA')
+          setBrandName(user.brand_name || 'B1 Copilot')
           setLogoUrl(user.logo_url || '')
           setLoggedIn(true)
           localStorage.setItem('cira-token', token)
           localStorage.setItem('cira-emp-id', user.employee_id)
           localStorage.setItem('cira-profile-name', user.name)
-          localStorage.setItem('cira-brand', user.brand_name || 'CIRA')
-          localStorage.setItem('cira-logo', user.logo_url || '')
+          localStorage.setItem('cira-brand', user.brand_name || 'B1 Copilot')
+          localStorage.setItem('cira-logo', user.logo_url || '/logo.jpg')
         }}
       />
     )
@@ -1409,7 +1415,7 @@ export default function Page() {
         ))}
       </div>
       {/* ── Big Robot Component ── */}
-      <Robot />
+      <Robot brandName={brandName} />
     </div>
   )
 }

@@ -58,7 +58,7 @@ export function RobotMascot({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
-      title={interactive ? 'CIRA AI Assistant — click me!' : 'CIRA AI Assistant'}
+      title={interactive ? 'B1 Copilot AI Assistant — click me!' : 'B1 Copilot AI Assistant'}
     >
       <svg
         viewBox="0 0 100 100"
